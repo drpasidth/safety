@@ -1,4 +1,5 @@
 import re
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -11,14 +12,15 @@ from django.utils import timezone
 from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_POST
 
-from core import pdf, scoring, standard
+from core import pdf, scoring, selfassess, standard
 
 from . import services
 from .forms import (AssignmentFormSet, ConclusionForm, ConsultantFormSet, ContextAnalysisForm, ContextIssueFormSet,
                     CoordinatorFormSet, EstablishmentCreateForm, EstablishmentForm, FindingForm,
-                    InterestedPartyFormSet, PublicContextForm, ReportSettingsForm, RoundCreateForm, RoundForm,
-                    ShareForm, consultant_formset)
-from .models import AssessmentRound, ContextAnalysis, Establishment, Finding, FindingPhoto, ReportSettings
+                    InterestedPartyFormSet, PublicContextForm, QuestionnaireCreateForm, ReportSettingsForm,
+                    RoundCreateForm, RoundForm, ShareForm, consultant_formset)
+from .models import (AssessmentRound, ContextAnalysis, Establishment, Finding, FindingPhoto, QEvidence, Questionnaire,
+                     ReportSettings)
 
 MIME = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -97,8 +99,10 @@ def establishment(request, pk):
                    else [{"role": "หัวหน้าที่ปรึกษา"}, {"role": "ที่ปรึกษา"}])
         consultants = consultant_formset(len(initial) + 1)(prefix="cons", initial=initial)
     history = [{"rnd": r, **round_stats(r)} for r in rounds]
+    questionnaires = [{"q": q, "r": services.rating(q)} for q in est.questionnaires.prefetch_related("answers", "files")]
     return render(request, "audits/establishment.html", {
-        "est": est, "history": list(reversed(history)), "form": form, "consultants": consultants, "last": last})
+        "est": est, "history": list(reversed(history)), "form": form, "consultants": consultants, "last": last,
+        "questionnaires": questionnaires, "q_form": QuestionnaireCreateForm()})
 
 
 @login_required
@@ -204,6 +208,87 @@ def public_context(request, token):
     if request.method == "GET" and ctx.submitted_by:
         page["form"].initial.setdefault("submitter", ctx.submitted_by)
     return render(request, "audits/public_context.html", page)
+
+
+# ---------------------------------------------------------------- online self-assessment
+
+@login_required
+@require_POST
+def questionnaire_new(request, pk):
+    est = get_object_or_404(Establishment, pk=pk)
+    form = QuestionnaireCreateForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "เลือกข้อกำหนดอย่างน้อย 1 ข้อ")
+        return redirect("audits:establishment", est.pk)
+    q = services.create_questionnaire(est, form.cleaned_data["scope"], form.cleaned_data["days"],
+                                      form.cleaned_data["title"])
+    messages.success(request, "สร้างแบบสอบถามแล้ว คัดลอกลิงก์ส่งให้สถานประกอบกิจการได้เลย")
+    return redirect("audits:questionnaire", q.pk)
+
+
+@login_required
+def questionnaire_detail(request, pk):
+    q = get_object_or_404(Questionnaire.objects.select_related("establishment"), pk=pk)
+    est = q.establishment
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "apply":
+            rnd = get_object_or_404(AssessmentRound, pk=request.POST.get("round"), establishment=est)
+            n = services.apply_to_round(q, rnd)
+            messages.success(request, f"นำผลประเมินตนเอง {n} ข้อไปใส่ใน checklist ของ {rnd.title} แล้ว กรุณาตรวจสอบยืนยัน")
+            return redirect(reverse("audits:checklist", args=[rnd.pk]) + f"?sub={q.scope[0]}")
+        if action == "reopen":
+            q.status = Questionnaire.DRAFT
+            q.expires = max(q.expires, timezone.localdate() + timedelta(days=7))
+            q.save(update_fields=["status", "expires"])
+            messages.success(request, "เปิดให้แก้ไขคำตอบอีกครั้งแล้ว")
+        elif action == "close":
+            q.expires = timezone.localdate() - timedelta(days=1)
+            q.save(update_fields=["expires"])
+            messages.success(request, "ปิดลิงก์แล้ว")
+        elif action == "delete":
+            q.delete()
+            messages.success(request, "ลบแบบสอบถามแล้ว")
+            return redirect("audits:establishment", est.pk)
+        return redirect("audits:questionnaire", q.pk)
+    return render(request, "audits/questionnaire_detail.html", {
+        "q": q, "est": est, "r": services.rating(q), "scores": selfassess.SCORES,
+        "public_url": request.build_absolute_uri(reverse("audits:public_questionnaire", args=[q.token])),
+        "rounds": list(est.rounds.all())[::-1]})
+
+
+def public_questionnaire(request, token):
+    q = Questionnaire.objects.select_related("establishment").filter(token=token).first()
+    if q is None or (q.status == Questionnaire.DRAFT and not q.open):
+        return render(request, "audits/public_closed.html", status=404)
+    if request.method == "POST" and q.open:
+        for problem in services.save_answers(q, request.POST, request.FILES):
+            messages.error(request, problem)
+        if request.POST.get("del_file"):
+            QEvidence.objects.filter(questionnaire=q, pk=request.POST["del_file"]).delete()
+            return redirect(request.path)
+        submitter = request.POST.get("submitter", "").strip()[:255]
+        if submitter != q.submitted_by:
+            q.submitted_by = submitter
+            q.save(update_fields=["submitted_by"])
+        if request.POST.get("action") == "submit":
+            problems = services.submit_problems(q) + ([] if submitter else ["ระบุชื่อ-สกุล / ตำแหน่ง ผู้ตอบแบบสอบถาม"])
+            if problems:
+                for p in problems[:10]:
+                    messages.error(request, p)
+                if len(problems) > 10:
+                    messages.error(request, f"และอีก {len(problems) - 10} รายการ")
+            else:
+                q.status, q.submitted_at = Questionnaire.SUBMITTED, timezone.now()
+                q.save(update_fields=["status", "submitted_at"])
+                messages.success(request, "ส่งแบบสอบถามเรียบร้อยแล้ว ขอบคุณครับ/ค่ะ")
+        else:
+            messages.success(request, "บันทึกร่างแล้ว กลับมาตอบต่อได้ด้วยลิงก์เดิม")
+        return redirect(request.path)
+    r = services.rating(q)
+    return render(request, "audits/public_questionnaire.html", {
+        "q": q, "est": q.establishment, "r": r, "scores": selfassess.SCORES,
+        "accept": ",".join(sorted(services.EVIDENCE_EXT))})
 
 
 # ---------------------------------------------------------------- rounds

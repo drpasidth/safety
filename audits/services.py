@@ -1,14 +1,16 @@
 """Bridge between the Django models and the framework-free code in `core/`."""
 import secrets
 from datetime import timedelta
+from pathlib import Path
 
 from django.db import transaction
 from django.utils import timezone
 
-from core import checklist_export, context_docx, pdf, report_docx, scoring
+from core import checklist_export, context_docx, pdf, report_docx, scoring, selfassess, standard
 
 from .models import (EXTERNAL, INTERNAL, AssessmentRound, Assignment, ContextAnalysis, ContextIssue, Establishment,
-                     Finding, FindingPhoto, InterestedParty, ReportSettings, Result)
+                     Finding, FindingPhoto, InterestedParty, QAnswer, QEvidence, Questionnaire, ReportSettings,
+                     Result)
 
 
 def _path(field) -> str:
@@ -192,6 +194,108 @@ def prefill_context(est: Establishment) -> tuple[int, int]:
             for n, (text, nature) in enumerate(rows)])
         issues = len(rows)
     return issues, parties
+
+
+EVIDENCE_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".docx", ".xlsx", ".doc", ".xls"}
+EVIDENCE_MAX_BYTES = 10 * 1024 * 1024
+EVIDENCE_MAX_PER_ITEM = 10
+
+
+def create_questionnaire(est: Establishment, scope: list[str], days: int, title: str = "") -> Questionnaire:
+    codes = [s["code"] for s in standard.subclauses() if s["code"] in set(scope)]
+    if not title:
+        title = ("ประเมินตนเอง " + ", ".join(codes)) if len(codes) <= 4 else "ประเมินตนเองทุกข้อกำหนด"
+    return Questionnaire.objects.create(establishment=est, title=title, scope=codes,
+                                        token=secrets.token_urlsafe(32),
+                                        expires=timezone.localdate() + timedelta(days=days))
+
+
+def answer_maps(q: Questionnaire) -> tuple[dict, dict]:
+    scores, notes = {}, {}
+    for a in q.answers.all():
+        scores[(a.item_id, a.q_index)] = a.score
+        notes[(a.item_id, a.q_index)] = a.note
+    return scores, notes
+
+
+def rating(q: Questionnaire) -> dict:
+    scores, notes = answer_maps(q)
+    result = selfassess.rate(q.scope, scores)
+    files = {}
+    for f in q.files.all():
+        files.setdefault(f.item_id, []).append(f)
+    for row in result["rows"]:
+        iid = row["item"]["id"]
+        row["answers"] = [{"n": n, "q": text, "score": row["scores"][n], "note": notes.get((iid, n), "")}
+                          for n, text in enumerate(row["questions"])]
+        row["files"] = files.get(iid, [])
+        row["sub_title"] = standard.subclause_title(row["item"]["subclause"])
+    return result
+
+
+@transaction.atomic
+def save_answers(q: Questionnaire, data, files) -> list[str]:
+    """Store posted answers and uploads; returns problems with uploaded files."""
+    existing = {(a.item_id, a.q_index): a for a in q.answers.all()}
+    problems = []
+    for item in selfassess.scoped_items(q.scope):
+        iid = item["id"]
+        for n in range(len(selfassess.questions(item))):
+            raw = data.get(f"s_{iid}_{n}", "")
+            score = int(raw) if raw in ("0", "1", "2") else None
+            note = data.get(f"n_{iid}_{n}", "").strip()
+            obj = existing.get((iid, n))
+            if obj is None:
+                if score is None and not note:
+                    continue
+                obj = QAnswer(questionnaire=q, item_id=iid, q_index=n)
+            obj.score, obj.note = score, note
+            obj.save()
+        uploads = files.getlist(f"f_{iid}")
+        count = q.files.filter(item_id=iid).count()
+        for up in uploads:
+            ext = Path(up.name).suffix.lower()
+            if ext not in EVIDENCE_EXT:
+                problems.append(f"{up.name}: รองรับเฉพาะ PDF, รูปภาพ, Word, Excel")
+            elif up.size > EVIDENCE_MAX_BYTES:
+                problems.append(f"{up.name}: ไฟล์ใหญ่เกิน 10 MB")
+            elif count >= EVIDENCE_MAX_PER_ITEM:
+                problems.append(f"{up.name}: แนบได้ไม่เกิน {EVIDENCE_MAX_PER_ITEM} ไฟล์ต่อข้อ")
+            else:
+                QEvidence.objects.create(questionnaire=q, item_id=iid, file=up, name=up.name[:255])
+                count += 1
+    return problems
+
+
+def submit_problems(q: Questionnaire) -> list[str]:
+    """Reasons the questionnaire cannot be submitted yet."""
+    scores, notes = answer_maps(q)
+    with_files = set(q.files.values_list("item_id", flat=True))
+    out = []
+    for item in selfassess.scoped_items(q.scope):
+        iid = item["id"]
+        for n in range(len(selfassess.questions(item))):
+            s = scores.get((iid, n))
+            if s is None:
+                out.append(f"ข้อ {item['label']} คำถามที่ {n + 1}: ยังไม่ได้เลือกคำตอบ")
+            elif s == 2 and not notes.get((iid, n)) and iid not in with_files:
+                out.append(f"ข้อ {item['label']} คำถามที่ {n + 1}: ระบุหลักฐานหรือแนบไฟล์สำหรับคำตอบ \"ดำเนินการแล้ว\"")
+    return out
+
+
+@transaction.atomic
+def apply_to_round(q: Questionnaire, rnd: AssessmentRound) -> int:
+    """Copy the self-assessed status and evidence into the round's checklist for the consultant to verify."""
+    scores, notes = answer_maps(q)
+    updates = {}
+    for row in selfassess.rate(q.scope, scores)["rows"]:
+        if row["status"]:
+            updates[row["item"]["id"]] = {"status": row["status"],
+                                          "evidence": selfassess.evidence_summary(row, notes)}
+    save_results(rnd, updates)
+    q.applied_round = rnd
+    q.save(update_fields=["applied_round"])
+    return len(updates)
 
 
 def build_checklist(rnd: AssessmentRound | None, fmt: str) -> bytes:

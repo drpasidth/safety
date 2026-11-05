@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% load audit %}
+{% block title %}{{ q.title }} · {{ est.name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow">
+<style>
+  .q-bar { position: sticky; top: 0; z-index: 10; }
+  .answer-group .btn { white-space: normal; text-align: left; }
+</style>{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <h1 class="h4 mb-0">แบบสอบถามประเมินตนเอง T-OSH OSHMS:2023</h1>
+  <div class="text-muted"><strong>{{ est.name }}</strong> · {{ q.title }}</div>
+</div>
+
+{% if not q.open %}
+  <div class="alert alert-success"><i class="bi bi-check-circle"></i> ส่งแบบสอบถามแล้ว{% if q.submitted_at %} เมื่อ {{ q.submitted_at|date:"j/n/Y H:i" }}{% endif %}
+    โดย {{ q.submitted_by }} · ที่ปรึกษาจะตรวจสอบหลักฐานและติดต่อกลับ</div>
+  {% include "audits/_rating_summary.html" %}
+  {% for row in r.rows %}
+    {% ifchanged row.item.subclause %}<h2 class="h6 mt-3">{{ row.item.subclause }} {{ row.sub_title }}</h2>{% endifchanged %}
+    <div class="small border-start border-3 border-{{ row.status|status_color }} ps-2 mb-1">
+      <strong>{{ row.item.label }}</strong> — {{ row.pct|floatformat:0 }}%
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="alert alert-info small">
+    ตอบคำถามแต่ละข้อตามสภาพการดำเนินงานจริง ถ้าตอบ <strong>"ดำเนินการแล้ว มีหลักฐาน"</strong> ให้ระบุชื่อเอกสาร/หลักฐาน หรือแนบไฟล์
+    · กด "บันทึกร่าง" เพื่อกลับมาทำต่อด้วยลิงก์เดิม (ใช้ได้ถึง {{ q.expires|date:"j/n/Y" }}) · กด "ส่งแบบสอบถาม" เมื่อตอบครบ
+  </div>
+
+  <form method="post" enctype="multipart/form-data" id="q-form">{% csrf_token %}
+    <div class="card card-body shadow-sm py-2 mb-3 q-bar">
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        <div class="flex-grow-1">
+          <div class="progress progress-stack mb-1"><div class="progress-bar bg-primary" id="q-progress" style="width: 0%"></div></div>
+          <span class="small" id="q-count"></span>
+        </div>
+        <button class="btn btn-outline-primary btn-sm" name="action" value="save"><i class="bi bi-save"></i> บันทึกร่าง</button>
+      </div>
+    </div>
+
+    {% for row in r.rows %}
+      {% with i=row.item %}
+      {% ifchanged i.subclause %}<h2 class="h5 mt-4">{{ i.subclause }} {{ row.sub_title }}</h2>{% endifchanged %}
+      <div class="card shadow-sm mb-3" id="item-{{ i.id }}">
+        <div class="card-header bg-white">
+          <div class="fw-semibold">ข้อกำหนด {{ i.label }}</div>
+          {% if i.parent %}<div class="small text-muted pre-line">{{ i.parent }}</div>{% endif %}
+          <div class="small pre-line">{{ i.requirement }}</div>
+        </div>
+        <div class="card-body">
+          {% for a in row.answers %}
+            <div class="mb-3 q-question">
+              <div class="mb-1">{{ forloop.counter }}. {{ a.q }}</div>
+              <div class="btn-group-vertical btn-group-sm answer-group w-100 mb-1 d-md-flex flex-md-row" role="group">
+                {% for val, label in scores.items %}
+                  <input type="radio" class="btn-check" name="s_{{ i.id }}_{{ a.n }}" id="s_{{ i.id }}_{{ a.n }}_{{ val }}" value="{{ val }}" {% if a.score == val %}checked{% endif %}>
+                  <label class="btn btn-outline-{% if val == 2 %}success{% elif val == 1 %}warning{% else %}danger{% endif %}" for="s_{{ i.id }}_{{ a.n }}_{{ val }}">{{ label }}</label>
+                {% endfor %}
+              </div>
+              <input class="form-control form-control-sm" name="n_{{ i.id }}_{{ a.n }}" value="{{ a.note }}" placeholder="หลักฐาน / ชื่อเอกสาร / คำอธิบาย">
+            </div>
+          {% endfor %}
+          <div class="small">
+            <span class="text-muted"><i class="bi bi-paperclip"></i> ไฟล์หลักฐาน:</span>
+            {% for f in row.files %}
+              <span class="badge text-bg-light border me-1">{{ f.name }}
+                <button class="btn btn-link btn-sm p-0 ms-1 text-danger" name="del_file" value="{{ f.pk }}" title="ลบไฟล์"
+                        onclick="return confirm('ลบไฟล์ {{ f.name|escapejs }}?')"><i class="bi bi-x"></i></button></span>
+            {% empty %}<span class="text-muted">ยังไม่มี</span>{% endfor %}
+            <input type="file" class="form-control form-control-sm mt-1" name="f_{{ i.id }}" multiple accept="{{ accept }}">
+          </div>
+        </div>
+      </div>
+      {% endwith %}
+    {% endfor %}
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <div class="row align-items-end">
+          <div class="col-md-6 mb-2">
+            <label class="form-label" for="submitter">ชื่อ-สกุล / ตำแหน่ง ผู้ตอบแบบสอบถาม</label>
+            <input class="form-control" id="submitter" name="submitter" value="{{ q.submitted_by }}" maxlength="255">
+          </div>
+          <div class="col-md-6 mb-2 d-flex gap-2">
+            <button class="btn btn-outline-primary" name="action" value="save"><i class="bi bi-save"></i> บันทึกร่าง</button>
+            <button class="btn btn-primary" name="action" value="submit" onclick="return confirm('ส่งแบบสอบถาม? หลังส่งแล้วจะแก้ไขไม่ได้ จนกว่าที่ปรึกษาจะเปิดให้แก้ไข')">
+              <i class="bi bi-send"></i> ส่งแบบสอบถาม</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const form = document.getElementById("q-form");
+  if (!form) return;
+  const groups = [...form.querySelectorAll(".q-question")];
+  let dirty = false;
+  const update = () => {
+    const done = groups.filter(g => g.querySelector("input[type=radio]:checked")).length;
+    document.getElementById("q-progress").style.width = (100 * done / groups.length) + "%";
+    document.getElementById("q-count").textContent = `ตอบแล้ว ${done}/${groups.length} คำถาม`;
+  };
+  form.addEventListener("change", () => { dirty = true; update(); });
+  form.addEventListener("submit", () => { dirty = false; });
+  window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+  update();
+})();
+</script>
+{% endblock %}

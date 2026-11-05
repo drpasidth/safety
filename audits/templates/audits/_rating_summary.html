@@ -1,0 +1,28 @@
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-center">
+      <div class="col-md-4 text-center border-end">
+        <div class="small text-muted">ผลการประเมินตนเอง</div>
+        <div class="display-6 fw-bold text-{{ r.band.1 }}">{{ r.pct|floatformat:1 }}%</div>
+        <span class="badge fs-6 text-bg-{{ r.band.1 }}">{{ r.band.0 }}</span>
+        <div class="small text-muted mt-2">สอดคล้อง {{ r.conform }}/{{ r.total }} ข้อกำหนด · ตอบแล้ว {{ r.answered }}/{{ r.questions }} คำถาม</div>
+        {% if r.full_scope %}<div class="small mt-1">ความพร้อมระดับ: <strong>{% if r.ready_level %}SC{{ r.ready_level }}{% else %}ยังไม่ถึง SC1{% endif %}</strong></div>{% endif %}
+      </div>
+      <div class="col-md-8">
+        <table class="table table-sm mb-0 small align-middle">
+          <thead><tr><th>ข้อกำหนดย่อย</th><th class="text-center">สอดคล้อง</th><th style="width:40%">คะแนน</th></tr></thead>
+          <tbody>
+          {% for s in r.subs %}
+            <tr><td>{{ s.code }} {{ s.title|truncatechars:50 }}</td>
+              <td class="text-center">{{ s.conform }}/{{ s.total }}</td>
+              <td><div class="progress progress-stack"><div class="progress-bar bg-{{ s.band.1 }}" style="width: {{ s.pct }}%"></div></div>
+                <span class="text-{{ s.band.1 }}">{{ s.pct|floatformat:0 }}% · {{ s.band.0 }}</span></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <div class="small text-muted mt-2">เกณฑ์: ดำเนินการแล้วมีหลักฐาน = 2 คะแนน, บางส่วน = 1, ยังไม่ได้ดำเนินการ = 0 ·
+          ข้อกำหนดที่ได้คะแนนเต็มทุกคำถามถือว่า "สอดคล้อง" · ระดับ: 100% สอดคล้องครบถ้วน, ≥75% ดี, ≥50% พอใช้, ต่ำกว่า 50% ต้องปรับปรุง</div>
+      </div>
+    </div>
+  </div>
+</div>

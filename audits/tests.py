@@ -14,7 +14,7 @@ from PIL import Image
 from core import scoring
 
 from . import services
-from .models import AssessmentRound, ContextAnalysis, ContextIssue, Establishment, Finding, Result
+from .models import AssessmentRound, ContextAnalysis, ContextIssue, Establishment, Finding, Questionnaire, Result
 
 MEDIA = tempfile.mkdtemp(prefix="oshms-test-media-")
 
@@ -202,6 +202,61 @@ class SampleFlowTests(TestCase):
         self.client.post(url, {"action": "share_disable"})
         self.client.logout()
         self.assertEqual(self.client.get(new_public).status_code, 404)
+
+    def test_online_questionnaire_rating(self):
+        self.client.post(reverse("audits:questionnaire_new", args=[self.est.pk]), {"scope": ["4.2.1"], "days": 30})
+        q = Questionnaire.objects.get()
+        self.assertEqual(q.scope, ["4.2.1"])
+        public = reverse("audits:public_questionnaire", args=[q.token])
+        self.client.logout()
+        self.assertContains(self.client.get(public), "ประเด็นภายในที่ส่งผลต่อความสามารถ")
+
+        answers = {"submitter": "นายผู้ตอบ (จป.)"}
+        for n in range(3):
+            answers |= {f"s_1_{n}": "2", f"n_1_{n}": "เอกสาร FM-01", f"s_2_{n}": "2", f"n_2_{n}": "ทะเบียนผู้มีส่วนได้ส่วนเสีย",
+                        f"s_3_{n}": "1", f"s_4_{n}": "0"}
+        answers["s_3_0"] = ""
+        buf = io.BytesIO(b"%PDF-1.4 test")
+        buf.name = "หลักฐาน.pdf"
+        bad = io.BytesIO(b"MZ")
+        bad.name = "virus.exe"
+        resp = self.client.post(public, {**answers, "f_1": [buf, bad], "action": "submit"}, follow=True)
+        self.assertContains(resp, "virus.exe")
+        self.assertContains(resp, "ยังไม่ได้เลือกคำตอบ")
+        q.refresh_from_db()
+        self.assertEqual(q.status, Questionnaire.DRAFT)
+        self.assertEqual(q.files.count(), 1)
+
+        answers["s_3_0"] = "1"
+        self.client.post(public, {**answers, "action": "submit"})
+        q.refresh_from_db()
+        self.assertEqual((q.status, q.submitted_by), (Questionnaire.SUBMITTED, "นายผู้ตอบ (จป.)"))
+        r = services.rating(q)
+        self.assertEqual([row["status"] for row in r["rows"]], ["C", "C", "IP", "NS"])
+        self.assertAlmostEqual(r["pct"], 100 * (6 + 6 + 3 + 0) / 24)
+        self.assertEqual(r["band"][0], "พอใช้")
+        self.client.post(public, {**answers, "s_4_0": "2", "action": "save"})
+        self.assertEqual(services.rating(q)["rows"][3]["status"], "NS")
+
+        self.client.force_login(self.user)
+        self.assertContains(self.client.get(reverse("audits:questionnaire", args=[q.pk])), "พอใช้")
+        self.assertContains(self.client.get(reverse("audits:establishment", args=[self.est.pk])), q.title)
+        resp = self.client.post(reverse("audits:questionnaire", args=[q.pk]),
+                                {"action": "apply", "round": self.visit.pk})
+        self.assertRedirects(resp, reverse("audits:checklist", args=[self.visit.pk]) + "?sub=4.2.1")
+        self.assertEqual(Result.objects.get(round=self.visit, item_id=4).status, "NS")
+        self.assertIn("ทะเบียนผู้มีส่วนได้ส่วนเสีย", Result.objects.get(round=self.visit, item_id=2).evidence)
+
+        self.client.post(reverse("audits:questionnaire", args=[q.pk]), {"action": "reopen"})
+        self.client.post(reverse("audits:questionnaire", args=[q.pk]), {"action": "close"})
+        self.client.logout()
+        self.assertEqual(self.client.get(public).status_code, 404)
+
+    def test_generated_questions_cover_every_requirement(self):
+        from core import selfassess, standard
+        for item in standard.items():
+            qs = selfassess.questions(item)
+            self.assertTrue(qs and all(q.endswith("หรือไม่") or q.startswith("ดำเนินการตาม") for q in qs), item["id"])
 
     def test_delete_requires_typed_name(self):
         self.client.post(reverse("audits:establishment_delete", args=[self.est.pk]), {"confirm": "ผิด"})

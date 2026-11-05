@@ -48,6 +48,52 @@
       </div>
     </div>
 
+    <div class="card shadow-sm mb-3 border-primary-subtle">
+      <div class="card-header bg-primary-subtle fw-semibold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-ui-radios"></i> แบบสอบถามประเมินตนเองออนไลน์</span>
+        <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#q-new"><i class="bi bi-plus"></i> สร้างแบบสอบถาม</button>
+      </div>
+      <div class="collapse {% if not questionnaires %}show{% endif %}" id="q-new">
+        <form method="post" action="{% url 'audits:questionnaire_new' est.pk %}" class="card-body border-bottom">{% csrf_token %}
+          <p class="small text-muted mb-2">สถานประกอบกิจการตอบคำถามทางเว็บผ่านลิงก์ (ไม่ต้องมีบัญชี) พร้อมแนบหลักฐาน
+            ระบบจะประเมินเทียบกับข้อกำหนดและให้ระดับผลการประเมินอัตโนมัติ</p>
+          <div class="d-flex gap-2 mb-2 small">
+            <a href="#" class="js-scope" data-scope="4.2.1">เฉพาะ 4.2.1</a> ·
+            <a href="#" class="js-scope" data-scope="all">ทุกข้อกำหนด</a> ·
+            <a href="#" class="js-scope" data-scope="none">ล้าง</a>
+          </div>
+          <div class="row row-cols-1 row-cols-md-2 small mb-2" style="max-height: 14rem; overflow-y: auto">
+            {% for c in q_form.scope %}<div class="col"><div class="form-check">{{ c.tag }} <label class="form-check-label" for="{{ c.id_for_label }}">{{ c.choice_label }}</label></div></div>{% endfor %}
+          </div>
+          <div class="row">
+            <div class="col-md-8">{% include "audits/_field.html" with field=q_form.title %}</div>
+            <div class="col-md-4">{% include "audits/_field.html" with field=q_form.days %}</div>
+          </div>
+          <button class="btn btn-primary"><i class="bi bi-link-45deg"></i> สร้างแบบสอบถามและลิงก์</button>
+        </form>
+      </div>
+      {% if questionnaires %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead><tr><th>แบบสอบถาม</th><th>สถานะ</th><th>ตอบแล้ว</th><th style="min-width:12rem">ผลการประเมิน</th></tr></thead>
+          <tbody>
+          {% for x in questionnaires %}
+            <tr>
+              <td><a href="{% url 'audits:questionnaire' x.q.pk %}">{{ x.q.title }}</a><div class="small text-muted">สร้าง {{ x.q.created_at|date:"j/n/Y" }}</div></td>
+              <td>{% if x.q.status == "submitted" %}<span class="badge text-bg-success">ส่งแล้ว {{ x.q.submitted_at|date:"j/n/Y" }}</span>
+                  {% elif x.q.open %}<span class="badge text-bg-info">รอตอบ (ถึง {{ x.q.expires|date:"j/n/Y" }})</span>
+                  {% else %}<span class="badge text-bg-secondary">ลิงก์ปิดแล้ว</span>{% endif %}</td>
+              <td class="small">{{ x.r.answered }}/{{ x.r.questions }} คำถาม</td>
+              <td>{% if x.r.answered %}<span class="badge text-bg-{{ x.r.band.1 }}">{{ x.r.band.0 }}</span> {{ x.r.pct|floatformat:1 }}%
+                  <span class="small text-muted">· สอดคล้อง {{ x.r.conform }}/{{ x.r.total }} ข้อ</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+
     <div class="card shadow-sm">
       <div class="card-header bg-white fw-semibold"><i class="bi bi-plus-circle"></i> สร้างรอบการตรวจใหม่</div>
       <div class="card-body">
@@ -110,4 +156,15 @@
     </div>
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll(".js-scope").forEach(a => a.addEventListener("click", e => {
+  e.preventDefault();
+  const want = a.dataset.scope;
+  document.querySelectorAll('#q-new input[name="scope"]').forEach(cb => {
+    cb.checked = want === "all" || cb.value === want;
+  });
+}));
+</script>
 {% endblock %}

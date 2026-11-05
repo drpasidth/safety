@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% load audit %}
+{% block title %}{{ q.title }} · {{ est.name }}{% endblock %}
+{% block breadcrumb %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb">
+  <li class="breadcrumb-item"><a href="{% url 'audits:home' %}">สถานประกอบกิจการ</a></li>
+  <li class="breadcrumb-item"><a href="{{ est.get_absolute_url }}">{{ est.name }}</a></li>
+  <li class="breadcrumb-item active">{{ q.title }}</li>
+</ol></nav>
+{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <h1 class="h4 mb-0">{{ q.title }}</h1>
+    <div class="text-muted small">แบบสอบถามประเมินตนเองออนไลน์ · {{ est.name }} · {{ r.total }} ข้อกำหนด {{ r.questions }} คำถาม</div>
+  </div>
+  <div>
+    {% if q.status == "submitted" %}<span class="badge fs-6 text-bg-success">ส่งแล้ว {{ q.submitted_at|date:"j/n/Y H:i" }} โดย {{ q.submitted_by }}</span>
+    {% elif q.open %}<span class="badge fs-6 text-bg-info">รอสถานประกอบกิจการตอบ</span>
+    {% else %}<span class="badge fs-6 text-bg-secondary">ลิงก์ปิดแล้ว</span>{% endif %}
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3 border-primary-subtle">
+  <div class="card-body">
+    <div class="input-group mb-2">
+      <span class="input-group-text"><i class="bi bi-globe"></i></span>
+      <input class="form-control" id="share-url" value="{{ public_url }}" readonly>
+      <button class="btn btn-outline-primary" type="button" id="copy-share"><i class="bi bi-clipboard"></i> คัดลอกลิงก์</button>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center small">
+      <span class="text-muted me-2">ลิงก์ใช้ได้ถึง {{ q.expires|thai_short }} · ส่งให้เฉพาะผู้ประสานงานของสถานประกอบกิจการ</span>
+      <form method="post" class="d-inline">{% csrf_token %}
+        {% if q.status == "submitted" or not q.open %}
+          <button class="btn btn-sm btn-outline-primary" name="action" value="reopen"><i class="bi bi-unlock"></i> เปิดให้แก้ไขคำตอบ</button>
+        {% else %}
+          <button class="btn btn-sm btn-outline-secondary" name="action" value="close" onclick="return confirm('ปิดลิงก์?')"><i class="bi bi-x-circle"></i> ปิดลิงก์</button>
+        {% endif %}
+        <button class="btn btn-sm btn-outline-danger" name="action" value="delete" onclick="return confirm('ลบแบบสอบถามนี้พร้อมคำตอบและไฟล์?')"><i class="bi bi-trash"></i> ลบ</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% include "audits/_rating_summary.html" %}
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body d-flex flex-wrap gap-2 align-items-center">
+    <div class="me-auto">
+      <div class="fw-semibold"><i class="bi bi-box-arrow-in-right"></i> นำผลไปใช้ในการตรวจประเมิน</div>
+      <div class="small text-muted">คัดลอกผล (C/IP/NS) และหลักฐานที่สถานประกอบกิจการตอบ ไปใส่ใน checklist ของรอบที่เลือก เพื่อให้ที่ปรึกษาตรวจสอบยืนยัน
+        (ทับผลเดิมของข้อที่ตอบแล้ว){% if q.applied_round %} · ใช้กับ {{ q.applied_round.title }} แล้ว{% endif %}</div>
+    </div>
+    {% if rounds %}
+      <form method="post" class="d-flex gap-2" onsubmit="return confirm('เขียนผลประเมินตนเองทับผลการตรวจในรอบที่เลือก?')">{% csrf_token %}
+        <select name="round" class="form-select form-select-sm">
+          {% for rnd in rounds %}<option value="{{ rnd.pk }}">{{ rnd.title }} · {{ rnd.date|thai_short }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-sm btn-primary text-nowrap" name="action" value="apply" {% if not r.answered %}disabled{% endif %}>นำไปใช้</button>
+      </form>
+    {% else %}
+      <span class="small text-muted">สร้างรอบการตรวจก่อน</span>
+    {% endif %}
+  </div>
+</div>
+
+{% for row in r.rows %}
+  {% with i=row.item %}
+  {% ifchanged i.subclause %}<h2 class="h5 mt-4">{{ i.subclause }} {{ row.sub_title }}</h2>{% endifchanged %}
+  <div class="card shadow-sm mb-2 item-card status-{{ row.status }}">
+    <div class="card-body py-2">
+      <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div class="fw-semibold">ข้อ {{ i.id }} · {{ i.label }}</div>
+        <div>
+          <span class="badge text-bg-{{ row.status|status_color }}">{% if row.status %}{{ row.status }}{% else %}ยังไม่ตอบ{% endif %}</span>
+          <span class="small">{{ row.points }}/{{ row.max }} คะแนน ({{ row.pct|floatformat:0 }}%)</span>
+        </div>
+      </div>
+      <div class="small text-muted mb-2">{{ i.requirement|truncatechars:220 }}</div>
+      <table class="table table-sm small mb-1">
+        {% for a in row.answers %}
+          <tr><td style="width:50%">{{ forloop.counter }}. {{ a.q }}</td>
+            <td style="width:20%">{% if a.score == 2 %}<span class="text-success">{{ scores|getitem:2 }}</span>
+              {% elif a.score == 1 %}<span class="text-warning-emphasis">{{ scores|getitem:1 }}</span>
+              {% elif a.score == 0 %}<span class="text-danger">{{ scores|getitem:0 }}</span>
+              {% else %}<span class="text-muted">ยังไม่ตอบ</span>{% endif %}</td>
+            <td>{{ a.note }}</td></tr>
+        {% endfor %}
+      </table>
+      {% if row.files %}<div class="small"><i class="bi bi-paperclip"></i>
+        {% for f in row.files %}<a href="{{ f.file.url }}" target="_blank" class="me-2">{{ f.name }}</a>{% endfor %}</div>{% endif %}
+    </div>
+  </div>
+  {% endwith %}
+{% endfor %}
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("copy-share")?.addEventListener("click", e => {
+  navigator.clipboard.writeText(document.getElementById("share-url").value)
+    .then(() => { e.currentTarget.innerHTML = '<i class="bi bi-check2"></i> คัดลอกแล้ว'; });
+});
+</script>
+{% endblock %}

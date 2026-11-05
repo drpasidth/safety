@@ -278,6 +278,59 @@ class InterestedParty(models.Model):
         return self.party
 
 
+class Questionnaire(models.Model):
+    DRAFT, SUBMITTED = "draft", "submitted"
+    STATUS_CHOICES = [(DRAFT, "รอสถานประกอบกิจการตอบ"), (SUBMITTED, "ส่งคำตอบแล้ว")]
+
+    establishment = models.ForeignKey(Establishment, on_delete=models.CASCADE, related_name="questionnaires")
+    title = models.CharField("ชื่อแบบสอบถาม", max_length=255)
+    scope = models.JSONField("ข้อกำหนดย่อยที่ประเมิน", default=list)
+    token = models.CharField(max_length=64, unique=True, editable=False)
+    expires = models.DateField("ลิงก์ใช้ได้ถึง")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=DRAFT)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    submitted_by = models.CharField("ผู้ตอบ", max_length=255, blank=True)
+    applied_round = models.ForeignKey(AssessmentRound, null=True, blank=True, on_delete=models.SET_NULL,
+                                      related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "แบบสอบถามประเมินตนเอง"
+        verbose_name_plural = "แบบสอบถามประเมินตนเอง"
+
+    def __str__(self):
+        return f"{self.establishment} · {self.title}"
+
+    @property
+    def open(self) -> bool:
+        from django.utils import timezone
+        return self.status == self.DRAFT and self.expires >= timezone.localdate()
+
+
+class QAnswer(models.Model):
+    questionnaire = models.ForeignKey(Questionnaire, on_delete=models.CASCADE, related_name="answers")
+    item_id = models.PositiveSmallIntegerField()
+    q_index = models.PositiveSmallIntegerField()
+    score = models.PositiveSmallIntegerField(null=True, blank=True)
+    note = models.TextField("หลักฐาน / คำอธิบาย", blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["questionnaire", "item_id", "q_index"],
+                                               name="unique_answer_per_question")]
+
+
+class QEvidence(models.Model):
+    questionnaire = models.ForeignKey(Questionnaire, on_delete=models.CASCADE, related_name="files")
+    item_id = models.PositiveSmallIntegerField()
+    file = models.FileField(upload_to="evidence/%Y/%m/")
+    name = models.CharField(max_length=255)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["item_id", "id"]
+
+
 class ReportSettings(models.Model):
     org_lines = models.TextField("หัวกระดาษ (บรรทัดละ 1 บรรทัด)", default="\n".join([
         "สถาบันส่งเสริมความปลอดภัย อาชีวอนามัย และสภาพแวดล้อมในการทำงาน (องค์การมหาชน)",

@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .models import (AssessmentRound, Assignment, Consultant, ContextAnalysis, ContextIssue, Coordinator,
-                     Establishment, Finding, FindingPhoto, InterestedParty, ReportSettings, Result)
+                     Establishment, Finding, FindingPhoto, InterestedParty, Questionnaire, ReportSettings, Result)
 
 
 class CoordinatorInline(admin.TabularInline):
@@ -27,6 +27,12 @@ class EstablishmentAdmin(admin.ModelAdmin):
 
 
 admin.site.register(ContextAnalysis)
+
+
+@admin.register(Questionnaire)
+class QuestionnaireAdmin(admin.ModelAdmin):
+    list_display = ["establishment", "title", "status", "expires", "submitted_at"]
+    list_filter = ["status"]
 
 
 class ConsultantInline(admin.TabularInline):

@@ -159,6 +159,19 @@ class ShareForm(BootstrapMixin, forms.Form):
                                   choices=[(7, "7 วัน"), (30, "30 วัน"), (90, "90 วัน")])
 
 
+class QuestionnaireCreateForm(BootstrapMixin, forms.Form):
+    scope = forms.MultipleChoiceField(
+        label="ข้อกำหนดที่ให้ประเมินตนเอง", initial=["4.2.1"], widget=forms.CheckboxSelectMultiple,
+        choices=lambda: [(s["code"], f"{s['code']} {s['title']}") for s in standard.subclauses()])
+    title = forms.CharField(label="ชื่อแบบสอบถาม (ไม่บังคับ)", max_length=255, required=False)
+    days = forms.TypedChoiceField(label="อายุลิงก์", coerce=int, initial=30,
+                                  choices=[(7, "7 วัน"), (30, "30 วัน"), (90, "90 วัน")])
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["scope"].widget.attrs["class"] = "form-check-input"
+
+
 class ContextIssueForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         model = ContextIssue
