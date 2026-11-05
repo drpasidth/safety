@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% load audit %}
+{% block title %}ตรวจตาม checklist · {{ est.name }}{% endblock %}
+{% block breadcrumb %}{% include "audits/_round_header.html" %}{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-3">
+    <div class="card shadow-sm sub-nav">
+      <div class="card-body p-2">
+        <div class="small mb-2 px-1">
+          <div class="progress progress-stack mb-1"><div class="progress-bar bg-success" style="width: {{ overall.pct }}%"></div></div>
+          <span id="overall-text">{{ labels.C }} {{ overall.conform }} · {{ labels.IP }} {{ overall.in_progress }} · ยังไม่ประเมิน {{ overall.unassessed }} (จาก {{ overall.total }})</span>
+        </div>
+        <div class="list-group list-group-flush">
+          <a class="list-group-item list-group-item-action py-1 {% if code == 'all' %}active{% endif %}" href="?sub=all&show={{ show }}{% if only_target %}&target=1{% endif %}">ทั้งหมด 169 ข้อในหน้าเดียว</a>
+          {% for n in nav %}
+            <a class="list-group-item list-group-item-action py-1 d-flex justify-content-between {% if n.sub.code == code %}active{% endif %}"
+               href="?sub={{ n.sub.code }}&show={{ show }}{% if only_target %}&target=1{% endif %}">
+              <span>{{ n.sub.code }} {{ n.sub.title|truncatechars:38 }}</span>
+              <span class="badge {% if n.p.conform == n.p.total %}text-bg-success{% elif n.p.unassessed == n.p.total %}text-bg-light{% else %}text-bg-warning{% endif %}">{{ n.p.conform }}/{{ n.p.total }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-9">
+    <form method="get" class="card card-body shadow-sm py-2 mb-3 d-flex flex-row flex-wrap gap-3 align-items-center">
+      <input type="hidden" name="sub" value="{{ code }}">
+      <div class="btn-group btn-group-sm" role="group" aria-label="ตัวกรอง">
+        <input type="radio" class="btn-check" name="show" id="show-all" value="all" {% if show == "all" %}checked{% endif %} onchange="this.form.submit()">
+        <label class="btn btn-outline-secondary" for="show-all">ทั้งหมด</label>
+        <input type="radio" class="btn-check" name="show" id="show-todo" value="todo" {% if show == "todo" %}checked{% endif %} onchange="this.form.submit()">
+        <label class="btn btn-outline-secondary" for="show-todo">ยังไม่ประเมิน</label>
+        <input type="radio" class="btn-check" name="show" id="show-nc" value="nc" {% if show == "nc" %}checked{% endif %} onchange="this.form.submit()">
+        <label class="btn btn-outline-secondary" for="show-nc">ยังไม่สอดคล้อง</label>
+      </div>
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="target" name="target" value="1" {% if only_target %}checked{% endif %} onchange="this.form.submit()">
+        <label class="form-check-label" for="target">เฉพาะข้อที่ต้องปฏิบัติสำหรับ SC{{ rnd.target_level }}</label>
+      </div>
+      <span class="ms-auto small text-muted save-state" id="save-state"><i class="bi bi-cloud-check"></i> บันทึกอัตโนมัติเมื่อเลือกผลหรือออกจากช่องหลักฐาน</span>
+    </form>
+
+    <form method="post" id="checklist-form">{% csrf_token %}
+    {% for g in groups %}
+      <h2 class="h5 mt-2">{{ g.sub.code }} {{ g.sub.title }}</h2>
+      {% if g.sub.intro %}<p class="pre-line">{{ g.sub.intro }}</p>{% endif %}
+      {% for row in g.rows %}
+        {% with i=row.item %}
+        {% if row.parent %}<p class="fw-semibold mb-2 pre-line">{{ row.parent }}</p>{% endif %}
+        <div class="card shadow-sm mb-2 item-card status-{{ row.status }}" id="item-{{ i.id }}" data-item="{{ i.id }}"
+             data-url="{% url 'audits:checklist_item' rnd.pk i.id %}">
+          <input type="hidden" name="item" value="{{ i.id }}">
+          <div class="card-body py-2">
+            <div class="d-flex justify-content-between flex-wrap gap-2">
+              <div class="fw-semibold">ข้อ {{ i.id }} · {{ i.label }}
+                {% for lvl, req in row.levels %}<span class="badge {% if req %}text-bg-primary{% else %}text-bg-light text-muted{% endif %}">SC{{ lvl }}</span>{% endfor %}
+              </div>
+              <span class="small text-muted js-state"></span>
+            </div>
+            <div class="pre-line my-1">{{ i.requirement }}</div>
+            <details class="small mb-2"><summary class="text-primary">แนวทางการตรวจประเมิน / กฎกระทรวงฯ 2565</summary>
+              <div class="pre-line mt-1">{{ i.guidance|default:"—" }}</div>
+              {% if i.law_ref %}<div class="text-muted mt-1">อ้างอิงกฎกระทรวงฯ 2565: {{ i.law_ref }}</div>{% endif %}
+            </details>
+            <div class="row g-2 align-items-start">
+              <div class="col-md-5">
+                <div class="btn-group-vertical w-100 btn-group-sm" role="group" aria-label="ผลการตรวจข้อ {{ i.id }}">
+                  {% for s, text in labels.items %}
+                    <input type="radio" class="btn-check js-status" name="status_{{ i.id }}" id="s{{ i.id }}{{ s }}" value="{{ s }}" {% if row.status == s %}checked{% endif %}>
+                    <label class="btn btn-outline-{{ s|status_color }} text-start" for="s{{ i.id }}{{ s }}"><i class="bi bi-{{ s|status_icon }}"></i> {{ text }}</label>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="col-md-7">
+                <textarea class="form-control form-control-sm js-evidence" name="evidence_{{ i.id }}" rows="3"
+                          aria-label="ผลการตรวจ / หลักฐาน ข้อ {{ i.id }}" placeholder="ผลการตรวจ / หลักฐาน เช่น มีการจัดทำเอกสาร ... / ไม่พบว่ามีการ ...">{{ row.evidence }}</textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endwith %}
+      {% empty %}
+        <div class="alert alert-light">ไม่มีข้อกำหนดตามตัวกรองที่เลือกในหัวข้อนี้</div>
+      {% endfor %}
+    {% endfor %}
+    <div class="d-flex flex-wrap gap-2 sticky-bottom bg-body-tertiary py-2 border-top">
+      {% if prev_code %}<a class="btn btn-outline-secondary" href="?sub={{ prev_code }}&show={{ show }}{% if only_target %}&target=1{% endif %}"><i class="bi bi-chevron-left"></i> ก่อนหน้า</a>{% endif %}
+      <button class="btn btn-primary" name="action" value="save"><i class="bi bi-save"></i> บันทึก</button>
+      {% if next_code %}<button class="btn btn-primary" name="action" value="next">บันทึกและไปหัวข้อถัดไป <i class="bi bi-chevron-right"></i></button>{% endif %}
+      <button class="btn btn-outline-success ms-auto" name="action" value="all_c"
+              onclick="return confirm('ตั้งทุกข้อในหน้านี้เป็น “{{ labels.C }}”?')"><i class="bi bi-check2-all"></i> ทุกข้อในหน้านี้: {{ labels.C }}</button>
+    </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ labels|json_script:"labels-data" }}
+<script>
+const csrf = document.querySelector("#checklist-form [name=csrfmiddlewaretoken]").value;
+const labels = JSON.parse(document.getElementById("labels-data").textContent);
+async function save(card, field, value) {
+  const state = card.querySelector(".js-state");
+  state.textContent = "กำลังบันทึก...";
+  const body = new FormData();
+  body.append(field, value);
+  try {
+    const r = await fetch(card.dataset.url, {method: "POST", body, headers: {"X-CSRFToken": csrf}});
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    state.innerHTML = '<i class="bi bi-check2 text-success"></i> บันทึกแล้ว';
+    const o = data.overall;
+    document.getElementById("overall-text").textContent =
+      `${labels.C} ${o.conform} · ${labels.IP} ${o.in_progress} · ยังไม่ประเมิน ${o.unassessed} (จาก ${o.total})`;
+  } catch (e) {
+    state.innerHTML = '<span class="text-danger">บันทึกไม่สำเร็จ กดปุ่มบันทึกด้านล่าง</span>';
+  }
+}
+document.querySelectorAll(".item-card").forEach(card => {
+  card.querySelectorAll(".js-status").forEach(r => r.addEventListener("change", () => {
+    card.className = card.className.replace(/status-\w*/, "status-" + r.value);
+    save(card, "status", r.value);
+  }));
+  const ev = card.querySelector(".js-evidence");
+  ev.addEventListener("change", () => save(card, "evidence", ev.value));
+});
+</script>
+{% endblock %}

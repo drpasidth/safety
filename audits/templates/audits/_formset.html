@@ -1,0 +1,18 @@
+{{ formset.management_form }}
+{% for e in formset.non_form_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+<table class="table table-sm align-middle mb-2">
+  <thead><tr>
+    {% for f in formset.empty_form.visible_fields %}{% if f.name != "DELETE" %}<th>{{ f.label }}</th>{% endif %}{% endfor %}
+    <th class="text-center" style="width:4rem">ลบ</th>
+  </tr></thead>
+  <tbody>
+  {% for form in formset %}
+    <tr>
+      {% for f in form.visible_fields %}{% if f.name != "DELETE" %}
+        <td>{{ f }}{% for e in f.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</td>
+      {% endif %}{% endfor %}
+      <td class="text-center">{% for h in form.hidden_fields %}{{ h }}{% endfor %}{% if form.DELETE %}{{ form.DELETE }}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>

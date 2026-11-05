@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+
+data/db.sqlite3
+data/db.sqlite3-journal
+data/secret_key.txt
+data/media/
+
+_img/
+_text/
+tools/_rows_cache.json
+output_samples/
+
+.cursor/
+.vscode/
+.idea/

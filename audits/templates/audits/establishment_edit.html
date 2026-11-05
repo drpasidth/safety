@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}แก้ไข {{ est.name }}{% endblock %}
+{% block breadcrumb %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb">
+  <li class="breadcrumb-item"><a href="{% url 'audits:home' %}">สถานประกอบกิจการ</a></li>
+  <li class="breadcrumb-item"><a href="{{ est.get_absolute_url }}">{{ est.name }}</a></li>
+  <li class="breadcrumb-item active">แก้ไขข้อมูล</li>
+</ol></nav>
+{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">ข้อมูลสถานประกอบกิจการ <small class="text-muted fs-6">ใช้ในหัวข้อ 1–6 ของรายงาน Initial Review</small></h1>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+  <div class="card shadow-sm mb-3"><div class="card-body">
+    <h2 class="h5">1. ประเภทกิจการ / ผู้ประสานงาน</h2>
+    <div class="row">
+      <div class="col-md-12">{% include "audits/_field.html" with field=form.name %}</div>
+      <div class="col-md-6">{% include "audits/_field.html" with field=form.product %}</div>
+      <div class="col-md-6">{% include "audits/_field.html" with field=form.business_type %}</div>
+      <div class="col-md-12">{% include "audits/_field.html" with field=form.address %}</div>
+    </div>
+    <h3 class="h6">ผู้ประสานงาน</h3>
+    {% include "audits/_formset.html" with formset=coords %}
+    <div class="row">
+      <div class="col-md-3">{% include "audits/_field.html" with field=form.employees %}</div>
+      <div class="col-md-9">{% include "audits/_field.html" with field=form.certifications %}</div>
+    </div>
+    <h3 class="h6">จำนวนเจ้าหน้าที่ความปลอดภัย (คน)</h3>
+    <div class="row">
+      <div class="col">{% include "audits/_field.html" with field=form.officers_executive %}</div>
+      <div class="col">{% include "audits/_field.html" with field=form.officers_supervisor %}</div>
+      <div class="col">{% include "audits/_field.html" with field=form.officers_technical %}</div>
+      <div class="col">{% include "audits/_field.html" with field=form.officers_technical_adv %}</div>
+      <div class="col">{% include "audits/_field.html" with field=form.officers_professional %}</div>
+    </div>
+  </div></div>
+
+  <div class="card shadow-sm mb-3"><div class="card-body">
+    <h2 class="h5">2. ผลิตภาพ (Productivity)</h2>
+    <div class="row">
+      <div class="col-md-6">{% include "audits/_field.html" with field=form.productivity_description %}</div>
+      <div class="col-md-3">{% include "audits/_field.html" with field=form.productivity_value %}</div>
+      <div class="col-md-3">{% include "audits/_field.html" with field=form.productivity_period %}</div>
+    </div>
+  </div></div>
+
+  <div class="card shadow-sm mb-3"><div class="card-body">
+    <h2 class="h5">3–4. แผนผังกระบวนการผลิต และโครงสร้างการบริหารงาน</h2>
+    <div class="row">
+      {% for field in form %}{% if field.name == "process_chart" or field.name == "org_chart" %}
+        <div class="col-md-6">
+          {% if field.value and field.value.url %}<img src="{{ field.value.url }}" alt="{{ field.label }}" class="img-fluid border rounded mb-2">{% endif %}
+          {% include "audits/_field.html" %}
+        </div>
+      {% endif %}{% endfor %}
+    </div>
+  </div></div>
+
+  <div class="card shadow-sm mb-3"><div class="card-body">
+    <h2 class="h5">5–6. จุดแข็ง / จุดอ่อน และขอบข่ายการขอรับรอง</h2>
+    <div class="row">
+      <div class="col-md-6">{% include "audits/_field.html" with field=form.strengths %}</div>
+      <div class="col-md-6">{% include "audits/_field.html" with field=form.weaknesses %}</div>
+      <div class="col-md-12">{% include "audits/_field.html" with field=form.scope %}</div>
+    </div>
+  </div></div>
+  <button class="btn btn-primary"><i class="bi bi-save"></i> บันทึก</button>
+  <a class="btn btn-link" href="{{ est.get_absolute_url }}">ยกเลิก</a>
+</form>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load audit %}
+{% block title %}{{ rnd.title }} · {{ est.name }}{% endblock %}
+{% block breadcrumb %}{% include "audits/_round_header.html" %}{% endblock %}
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-md-4 col-xl-2"><div class="card h-100 shadow-sm"><div class="card-body">
+    <div class="small text-muted">ดำเนินการแล้ว</div><div class="fs-3 fw-bold">{{ overall.pct|floatformat:2 }}%</div>
+    <div class="small">{{ overall.conform }} จาก {{ overall.total }} ข้อ</div></div></div></div>
+  <div class="col-md-4 col-xl-2"><div class="card h-100 shadow-sm"><div class="card-body">
+    <div class="small text-muted">อยู่ระหว่างดำเนินการ</div><div class="fs-3 fw-bold text-warning">{{ overall.in_progress }}</div></div></div></div>
+  <div class="col-md-4 col-xl-2"><div class="card h-100 shadow-sm"><div class="card-body">
+    <div class="small text-muted">ยังไม่ได้ดำเนินการ</div><div class="fs-3 fw-bold text-danger">{{ overall.not_started }}</div></div></div></div>
+  <div class="col-md-4 col-xl-2"><div class="card h-100 shadow-sm"><div class="card-body">
+    <div class="small text-muted">ยังไม่ประเมิน</div><div class="fs-3 fw-bold text-secondary">{{ overall.unassessed }}</div></div></div></div>
+  <div class="col-md-4 col-xl-2"><div class="card h-100 shadow-sm"><div class="card-body">
+    <div class="small text-muted">ระดับที่คาดหวัง</div><div class="fs-3 fw-bold">SC{{ rnd.target_level }}</div></div></div></div>
+  <div class="col-md-4 col-xl-2"><div class="card h-100 shadow-sm"><div class="card-body">
+    <div class="small text-muted">ระดับที่ที่ปรึกษาเสนอ</div><div class="fs-3 fw-bold text-primary">{{ level|level_label }}</div>
+    <div class="small text-muted">{% if level_chosen %}ที่ปรึกษากำหนด{% else %}อัตโนมัติ · <a href="{% url 'audits:conclusion' rnd.pk %}">กำหนดเอง</a>{% endif %}</div></div></div></div>
+</div>
+
+<div class="row g-3 mb-3">
+  {% for s in levels %}
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body">
+    <div class="d-flex justify-content-between"><span class="fw-bold">SC{{ s.level }}</span>
+      {% if s.complete %}<span class="badge text-bg-success">ผ่านครบ</span>{% else %}<span class="badge text-bg-warning">ขาดอีก {{ s.missing }} ข้อ</span>{% endif %}</div>
+    <div class="progress my-2" role="progressbar" aria-label="SC{{ s.level }}"><div class="progress-bar {% if s.complete %}bg-success{% endif %}" style="width: {{ s.pct }}%"></div></div>
+    <div class="small text-muted">{{ s.conform }}/{{ s.required }} ข้อ ({{ s.pct|floatformat:1 }}%)</div>
+  </div></div></div>
+  {% endfor %}
+</div>
+
+<div class="row g-3">
+  <div class="col-xl-7">
+    <div class="card shadow-sm">
+      <div class="card-header bg-white d-flex justify-content-between"><span class="fw-semibold">ผลรายข้อกำหนดย่อย</span>
+        <span class="small"><span class="badge text-bg-success">{{ labels.C }}</span> <span class="badge text-bg-warning">{{ labels.IP }}</span> <span class="badge text-bg-danger">{{ labels.NS }}</span> <span class="badge text-bg-secondary">ยังไม่ประเมิน</span></span></div>
+      <table class="table table-sm align-middle mb-0">
+        <tbody>
+        {% for s in subs %}
+          <tr>
+            <td class="small" style="width:45%"><a href="{% url 'audits:checklist' rnd.pk %}?sub={{ s.code }}" class="text-decoration-none">{{ s.code }} {{ s.title }}</a></td>
+            <td>
+              <div class="progress-stacked progress-stack">
+                <div class="progress" style="width: {{ s.w.conform }}%"><div class="progress-bar bg-success"></div></div>
+                <div class="progress" style="width: {{ s.w.in_progress }}%"><div class="progress-bar bg-warning"></div></div>
+                <div class="progress" style="width: {{ s.w.not_started }}%"><div class="progress-bar bg-danger"></div></div>
+                <div class="progress" style="width: {{ s.w.unassessed }}%"><div class="progress-bar bg-secondary-subtle"></div></div>
+              </div>
+            </td>
+            <td class="small text-end text-nowrap">{{ s.conform }}/{{ s.total }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col-xl-5">
+    <div class="card shadow-sm">
+      <div class="card-header bg-white fw-semibold">ข้อที่ยังไม่สอดคล้อง ({{ nc|length }})</div>
+      <div class="list-group list-group-flush">
+        {% for r in nc %}
+          <a class="list-group-item list-group-item-action" href="{% url 'audits:checklist' rnd.pk %}?sub={{ r.item.subclause }}#item-{{ r.item.id }}">
+            <div class="d-flex justify-content-between"><span class="fw-semibold small">ข้อ {{ r.item.id }} · {{ r.item.label }}</span>
+              <span class="badge text-bg-{{ r.status|status_color }}">{{ labels|getitem:r.status }}</span></div>
+            <div class="small text-muted">{{ r.evidence|default:r.item.requirement|truncatechars:140 }}</div>
+          </a>
+        {% empty %}
+          <div class="list-group-item text-success"><i class="bi bi-check-circle"></i> ไม่มีข้อที่ไม่สอดคล้อง</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

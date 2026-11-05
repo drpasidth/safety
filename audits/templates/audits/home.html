@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% load audit %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-end mb-3 gap-2">
+  <div>
+    <h1 class="h3 mb-1">ระบบตรวจประเมินมาตรฐานความปลอดภัย T-OSH OSHMS 2023</h1>
+    <p class="text-muted mb-0">ตรวจความสอดคล้องตามข้อกำหนดมาตรฐานระบบการจัดการด้านความปลอดภัย อาชีวอนามัย และสภาพแวดล้อมในการทำงาน เทียบกฎกระทรวงฯ 2565 แล้วออก checklist และรายงาน Initial Review / Site Visit</p>
+  </div>
+  <div class="d-flex gap-2">
+    {% for lvl, n in level_counts.items %}
+      <div class="card text-center px-3 py-2"><div class="small text-muted">SC{{ lvl }}</div><div class="fw-bold">{{ n }} ข้อ</div></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    {% for row in rows %}
+      <div class="card mb-3 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <h2 class="h5 mb-1"><a href="{{ row.est.get_absolute_url }}" class="text-decoration-none">{{ row.est.name }}</a></h2>
+              <div class="text-muted small">{{ row.est.address|default:"—" }}</div>
+            </div>
+            <a class="btn btn-outline-primary btn-sm" href="{{ row.est.get_absolute_url }}">เปิด <i class="bi bi-arrow-right"></i></a>
+          </div>
+          {% if row.rounds %}
+          <div class="row mt-3 g-2">
+            {% for r in row.rounds %}
+              <div class="col-sm-3">
+                <a href="{{ r.rnd.get_absolute_url }}" class="text-decoration-none text-body">
+                  <div class="border rounded p-2 h-100">
+                    <div class="small text-muted">{{ r.rnd.title }} · {{ r.rnd.date|thai_short }}</div>
+                    <div class="fw-bold fs-5">{{ r.overall.pct|floatformat:2 }}%</div>
+                    <div class="progress progress-stack"><div class="progress-bar bg-success" style="width: {{ r.overall.pct }}%"></div></div>
+                    <div class="small text-muted">{{ r.overall.conform }}/{{ r.overall.total }} ข้อ</div>
+                  </div>
+                </a>
+              </div>
+            {% endfor %}
+          </div>
+          {% else %}<div class="small text-muted mt-2">ยังไม่มีรอบการตรวจ</div>{% endif %}
+        </div>
+      </div>
+    {% empty %}
+      <div class="alert alert-info">ยังไม่มีข้อมูล เพิ่มสถานประกอบกิจการทางขวา หรือโหลดข้อมูลตัวอย่างด้วยคำสั่ง <code>python manage.py load_sample</code></div>
+    {% endfor %}
+  </div>
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h6"><i class="bi bi-plus-circle"></i> เพิ่มสถานประกอบกิจการ</h2>
+        <form method="post">{% csrf_token %}
+          {% include "audits/_field.html" with field=form.name %}
+          <button class="btn btn-primary">สร้าง</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

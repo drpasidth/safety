@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load audit %}
+{% block title %}ระดับ SC / นัดหมาย · {{ est.name }}{% endblock %}
+{% block breadcrumb %}{% include "audits/_round_header.html" %}{% endblock %}
+{% block content %}
+<div class="row g-3 mb-3">
+  {% for s in levels %}
+  <div class="col-md-3"><div class="card shadow-sm {% if s.complete %}border-success{% endif %}"><div class="card-body py-2">
+    <div class="fw-bold">SC{{ s.level }}</div><div>{{ s.conform }}/{{ s.required }} ข้อ ({{ s.pct|floatformat:1 }}%)</div>
+  </div></div></div>
+  {% endfor %}
+</div>
+<div class="alert alert-light">ระดับสูงสุดที่ผ่านครบทุกข้อ: <strong>{{ suggested|level_label }}</strong> — ที่ปรึกษาสามารถพิจารณาให้ระดับต่างจากนี้ได้</div>
+<form method="post" class="card card-body shadow-sm">{% csrf_token %}
+  <div class="row">
+    <div class="col-md-6">{% include "audits/_field.html" with field=form.recommended_level %}</div>
+    <div class="col-md-6">{% include "audits/_field.html" with field=form.next_visit %}</div>
+  </div>
+  {% include "audits/_field.html" with field=form.summary_note %}
+  {% if form.problems %}{% include "audits/_field.html" with field=form.problems %}{% endif %}
+  <div><button class="btn btn-primary"><i class="bi bi-save"></i> บันทึก</button></div>
+</form>
+{% endblock %}

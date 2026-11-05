@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}ข้อเสนอแนะ · {{ est.name }}{% endblock %}
+{% block breadcrumb %}{% include "audits/_round_header.html" %}{% endblock %}
+{% block content %}
+<div class="d-flex gap-2 mb-3">
+  <form method="post">{% csrf_token %}<button class="btn btn-primary" name="action" value="add"><i class="bi bi-plus"></i> เพิ่มประเด็น</button></form>
+  {% if prev %}
+  <form method="post">{% csrf_token %}<button class="btn btn-outline-secondary" name="action" value="copy"><i class="bi bi-box-arrow-in-down"></i> ยกประเด็นจาก {{ prev.title }} มาติดตามผล</button></form>
+  {% endif %}
+</div>
+<p class="text-muted small">ประเด็นที่ไม่สอดคล้องที่พบหน้างาน พร้อมรูปภาพและข้อเสนอแนะ ใช้ในหัวข้อ “ข้อเสนอแนะปรับปรุง” ของรายงาน{% if rnd.is_site_visit %} พร้อมสถานะการแก้ไข{% endif %}</p>
+<div class="table-responsive">
+<table class="table table-bordered bg-white align-top">
+  <thead class="table-primary"><tr>
+    <th style="width:3rem">#</th><th style="width:22%">รูปภาพ</th><th>คำอธิบาย (ประเด็นที่ไม่สอดคล้อง)</th><th>ข้อเสนอแนะในการปรับปรุงแก้ไข</th>
+    {% if rnd.is_site_visit %}<th style="width:10rem">สถานะการแก้ไข</th>{% endif %}<th style="width:8rem"></th>
+  </tr></thead>
+  <tbody>
+  {% for f in findings %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td>{% for p in f.photos.all %}<img src="{{ p.image.url }}" alt="รูปประกอบประเด็นที่ {{ forloop.parentloop.counter }}" class="img-fluid photo-thumb rounded mb-1 me-1" style="max-width:48%">{% empty %}<span class="text-muted small">—</span>{% endfor %}</td>
+      <td class="pre-line">{% if f.location %}<strong>{{ f.location }}</strong>
+{% endif %}{{ f.description }}</td>
+      <td class="pre-line">{{ f.recommendation }}</td>
+      {% if rnd.is_site_visit %}<td>{% if f.followup %}<span class="badge {% if f.followup == 'done' %}text-bg-success{% else %}text-bg-warning{% endif %}">{{ f.get_followup_display }}</span>{% endif %}</td>{% endif %}
+      <td>
+        <a class="btn btn-sm btn-outline-primary mb-1" href="{% url 'audits:finding_edit' f.pk %}"><i class="bi bi-pencil"></i> แก้ไข</a>
+        <form method="post" action="{% url 'audits:finding_edit' f.pk %}" class="d-inline">{% csrf_token %}
+          {% if not forloop.first %}<button class="btn btn-sm btn-light" name="action" value="up" title="เลื่อนขึ้น" aria-label="เลื่อนขึ้น"><i class="bi bi-arrow-up"></i></button>{% endif %}
+          {% if not forloop.last %}<button class="btn btn-sm btn-light" name="action" value="down" title="เลื่อนลง" aria-label="เลื่อนลง"><i class="bi bi-arrow-down"></i></button>{% endif %}
+        </form>
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="6" class="text-muted text-center">ยังไม่มีประเด็น (รายงานจะแสดง “ไม่พบประเด็นที่ต้องปรับปรุงเพิ่มเติม”)</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}สิ่งที่มอบหมาย · {{ est.name }}{% endblock %}
+{% block breadcrumb %}{% include "audits/_round_header.html" %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <p class="text-muted mb-0">ข้อกำหนดที่มอบหมายให้สถานประกอบกิจการดำเนินการก่อนการเข้าตรวจครั้งถัดไป</p>
+  <form method="post" onsubmit="return confirm('แทนที่รายการปัจจุบันด้วยรายการที่สร้างจากข้อที่ยังไม่สอดคล้อง?')">{% csrf_token %}
+    <button class="btn btn-outline-primary" name="action" value="generate" {% if not nc_count %}disabled{% endif %}>
+      <i class="bi bi-magic"></i> สร้างจากข้อที่ยังไม่สอดคล้อง ({{ nc_count }} ข้อ)</button>
+  </form>
+</div>
+<form method="post" class="card card-body shadow-sm">{% csrf_token %}
+  {% include "audits/_formset.html" with formset=formset %}
+  <div><button class="btn btn-primary"><i class="bi bi-save"></i> บันทึก</button>
+    <span class="text-muted small ms-2">ต้องการเพิ่มหลายแถว ให้บันทึกแล้วจะมีแถวว่างเพิ่มให้</span></div>
+</form>
+{% endblock %}

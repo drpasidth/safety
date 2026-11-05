@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}ตั้งค่ารายงาน{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">ตั้งค่าหัวกระดาษและรูปแบบรายงาน</h1>
+<div class="row g-3">
+  <div class="col-lg-8">
+    <form method="post" enctype="multipart/form-data" class="card card-body shadow-sm">{% csrf_token %}
+      {% include "audits/_field.html" with field=form.org_lines %}
+      {% include "audits/_field.html" with field=form.project_name %}
+      <div class="row">
+        <div class="col-md-3">{% include "audits/_field.html" with field=form.fiscal_year %}</div>
+        <div class="col-md-3">{% include "audits/_field.html" with field=form.font %}</div>
+        <div class="col-md-3">{% include "audits/_field.html" with field=form.font_size %}</div>
+        <div class="col-md-3">{% include "audits/_field.html" with field=form.table_font_size %}</div>
+      </div>
+      {% include "audits/_field.html" with field=form.logo %}
+      <div><button class="btn btn-primary"><i class="bi bi-save"></i> บันทึก</button></div>
+    </form>
+  </div>
+  <div class="col-lg-4">
+    <div class="card shadow-sm"><div class="card-body">
+      <h2 class="h6">ตัวอย่างหัวกระดาษ</h2>
+      <div class="d-flex gap-3 align-items-center border-bottom border-primary border-2 pb-2">
+        {% if obj.logo %}<img src="{{ obj.logo.url }}" alt="โลโก้หัวกระดาษ" style="width:70px">{% endif %}
+        <div class="small text-primary pre-line">{{ obj.org_lines }}</div>
+      </div>
+      <p class="small text-muted mt-3 mb-0">{% if word %}พบ Microsoft Word — สร้าง PDF และอัปเดตสารบัญได้{% else %}ไม่พบ Microsoft Word — ดาวน์โหลดได้เฉพาะ Word/Excel (เปิดแล้วสั่งบันทึกเป็น PDF เอง){% endif %}</p>
+    </div></div>
+  </div>
+</div>
+{% endblock %}

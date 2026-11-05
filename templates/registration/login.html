@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}เข้าสู่ระบบ{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-3"><i class="bi bi-shield-lock"></i> เข้าสู่ระบบ</h1>
+        {% if form.errors %}<div class="alert alert-danger py-2">ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง</div>{% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-3"><label class="form-label" for="id_username">ชื่อผู้ใช้</label>
+            <input class="form-control" name="username" id="id_username" autofocus required></div>
+          <div class="mb-3"><label class="form-label" for="id_password">รหัสผ่าน</label>
+            <input class="form-control" type="password" name="password" id="id_password" required></div>
+          <input type="hidden" name="next" value="{{ next }}">
+          <button class="btn btn-primary w-100">เข้าสู่ระบบ</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

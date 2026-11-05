@@ -1,0 +1,38 @@
+{% load audit %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb">
+  <li class="breadcrumb-item"><a href="{% url 'audits:home' %}">สถานประกอบกิจการ</a></li>
+  <li class="breadcrumb-item"><a href="{{ est.get_absolute_url }}">{{ est.name }}</a></li>
+  <li class="breadcrumb-item active">{{ rnd.title }} · {{ rnd.date|thai_short }}</li>
+</ol></nav>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div>
+    <h1 class="h4 mb-0">{{ rnd.title }} <span class="text-muted fs-6">{{ rnd.date|thai_long }} · คาดหวัง SC{{ rnd.target_level }}</span></h1>
+    <div class="text-muted small">{{ est.name }}</div>
+  </div>
+  <div class="dropdown">
+    <button class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> ออกรายงาน / checklist</button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li><h6 class="dropdown-header">รายงาน{{ rnd.title }}</h6></li>
+      <li><a class="dropdown-item" href="{% url 'audits:report' rnd.pk 'docx' %}"><i class="bi bi-file-earmark-word"></i> Word (.docx)</a></li>
+      <li><a class="dropdown-item js-slow" href="{% url 'audits:report' rnd.pk 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><h6 class="dropdown-header">Checklist พร้อมผลการตรวจ</h6></li>
+      <li><a class="dropdown-item" href="{% url 'audits:round_checklist' rnd.pk 'xlsx' %}"><i class="bi bi-file-earmark-excel"></i> Excel (.xlsx)</a></li>
+      <li><a class="dropdown-item" href="{% url 'audits:round_checklist' rnd.pk 'docx' %}"><i class="bi bi-file-earmark-word"></i> Word (.docx)</a></li>
+      <li><a class="dropdown-item js-slow" href="{% url 'audits:round_checklist' rnd.pk 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><span class="dropdown-item-text small text-muted">PDF สร้างผ่าน Microsoft Word ใช้เวลาประมาณ 20 วินาที</span></li>
+    </ul>
+  </div>
+</div>
+{% with u=request.resolver_match.url_name %}
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item"><a class="nav-link {% if u == 'round' %}active{% endif %}" href="{% url 'audits:round' rnd.pk %}"><i class="bi bi-speedometer2"></i> สรุปผล</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'checklist' %}active{% endif %}" href="{% url 'audits:checklist' rnd.pk %}"><i class="bi bi-ui-checks"></i> ตรวจตาม checklist</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'findings' or u == 'finding_edit' %}active{% endif %}" href="{% url 'audits:findings' rnd.pk %}"><i class="bi bi-camera"></i> ข้อเสนอแนะ</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'assignments' %}active{% endif %}" href="{% url 'audits:assignments' rnd.pk %}"><i class="bi bi-list-task"></i> สิ่งที่มอบหมาย</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'conclusion' %}active{% endif %}" href="{% url 'audits:conclusion' rnd.pk %}"><i class="bi bi-award"></i> ระดับ SC / นัดหมาย</a></li>
+  <li class="nav-item"><a class="nav-link {% if u == 'round_edit' %}active{% endif %}" href="{% url 'audits:round_edit' rnd.pk %}"><i class="bi bi-pencil"></i> ข้อมูลรอบ</a></li>
+</ul>
+{% endwith %}
+{% include "audits/_slow_js.html" %}

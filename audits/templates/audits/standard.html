@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}ข้อกำหนด T-OSH OSHMS 2023{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div>
+    <h1 class="h3 mb-1">ข้อกำหนด T-OSH OSHMS 2023 เทียบกฎกระทรวงฯ 2565</h1>
+    <div class="text-muted">169 ข้อ ·{% for lvl, n in level_counts.items %} SC{{ lvl }} = {{ n }}{% if not forloop.last %},{% endif %}{% endfor %}</div>
+  </div>
+  <div class="btn-group">
+    <a class="btn btn-success" href="{% url 'audits:blank_checklist' 'docx' %}"><i class="bi bi-file-earmark-word"></i> Checklist เปล่า Word</a>
+    <a class="btn btn-success" href="{% url 'audits:blank_checklist' 'xlsx' %}"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+    {% if word %}<a class="btn btn-success" href="{% url 'audits:blank_checklist' 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a>{% endif %}
+  </div>
+</div>
+<div class="accordion" id="std">
+{% for s in sections %}{% for sub in s.subs %}
+  <div class="accordion-item">
+    <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#c{{ forloop.parentloop.counter }}-{{ forloop.counter }}">
+      <span class="badge text-bg-primary me-2">{{ sub.sub.code }}</span> {{ sub.sub.title }} <span class="ms-2 text-muted small">({{ sub.items|length }} ข้อ)</span></button></h2>
+    <div id="c{{ forloop.parentloop.counter }}-{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#std">
+      <div class="accordion-body">
+        {% if sub.sub.intro %}<p class="pre-line">{{ sub.sub.intro }}</p>{% endif %}
+        <table class="table table-sm">
+          <thead><tr><th>ข้อ</th><th>ข้อกำหนด</th><th>SC ขั้นต่ำ</th><th>แนวทางการตรวจประเมิน</th><th>กฎกระทรวงฯ</th></tr></thead>
+          <tbody>{% for i in sub.items %}
+            <tr><td>{{ i.id }}</td><td class="pre-line small">{% if i.parent %}<span class="text-muted">{{ i.parent }}</span>
+{% endif %}{{ i.requirement }}</td><td>SC{{ i.min_level }}</td><td class="pre-line small">{{ i.guidance }}</td><td class="small">{{ i.law_ref }}</td></tr>
+          {% endfor %}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endfor %}{% endfor %}
+</div>
+{% endblock %}

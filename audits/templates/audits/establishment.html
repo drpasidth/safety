@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% load audit %}
+{% block title %}{{ est.name }}{% endblock %}
+{% block breadcrumb %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb">
+  <li class="breadcrumb-item"><a href="{% url 'audits:home' %}">สถานประกอบกิจการ</a></li>
+  <li class="breadcrumb-item active">{{ est.name }}</li>
+</ol></nav>
+{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">{{ est.name }}</h1>
+    <div class="text-muted">{{ est.product|default:"" }}{% if est.business_type %} · {{ est.business_type }}{% endif %}</div>
+  </div>
+  <a href="{% url 'audits:establishment_edit' est.pk %}" class="btn btn-outline-primary"><i class="bi bi-pencil"></i> แก้ไขข้อมูลสถานประกอบกิจการ</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-xl-8">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold"><i class="bi bi-calendar-check"></i> รอบการตรวจประเมิน</div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead><tr><th>รอบ</th><th>วันที่</th><th>ดำเนินการแล้ว</th>
+            {% for lvl in "1234" %}<th class="text-center">SC{{ lvl }}</th>{% endfor %}
+            <th>คาดหวัง / เสนอ</th><th></th></tr></thead>
+          <tbody>
+          {% for h in history %}
+            <tr>
+              <td><a href="{{ h.rnd.get_absolute_url }}">{{ h.rnd.title }}</a></td>
+              <td>{{ h.rnd.date|thai_short }}</td>
+              <td style="min-width:10rem">
+                <div class="progress progress-stack mb-1"><div class="progress-bar bg-success" style="width: {{ h.overall.pct }}%"></div></div>
+                <span class="small">{{ h.overall.conform }}/{{ h.overall.total }} ({{ h.overall.pct|floatformat:2 }}%)</span>
+              </td>
+              {% for s in h.levels %}
+                <td class="text-center small {% if s.complete %}text-success fw-bold{% endif %}">{{ s.pct|floatformat:1 }}%</td>
+              {% endfor %}
+              <td>SC{{ h.rnd.target_level }} / {{ h.level|level_label }}{% if not h.level_chosen %} <span class="badge text-bg-light">อัตโนมัติ</span>{% endif %}</td>
+              <td class="text-end"><a class="btn btn-sm btn-primary" href="{% url 'audits:checklist' h.rnd.pk %}"><i class="bi bi-ui-checks"></i> ตรวจ</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9" class="text-muted">ยังไม่มีรอบการตรวจ สร้างรอบแรกด้านล่าง</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-white fw-semibold"><i class="bi bi-plus-circle"></i> สร้างรอบการตรวจใหม่</div>
+      <div class="card-body">
+        <form method="post">{% csrf_token %}
+          <div class="row">
+            <div class="col-md-3">{% include "audits/_field.html" with field=form.kind %}</div>
+            <div class="col-md-3">{% include "audits/_field.html" with field=form.visit_no %}</div>
+            <div class="col-md-3">{% include "audits/_field.html" with field=form.date %}</div>
+            <div class="col-md-3">{% include "audits/_field.html" with field=form.target_level %}</div>
+          </div>
+          <h3 class="h6">ที่ปรึกษาผู้รับผิดชอบ</h3>
+          {% include "audits/_formset.html" with formset=consultants %}
+          {% if last %}
+            <div class="text-muted small mb-1">ต่อยอดจากรอบล่าสุด: {{ last.title }} ({{ last.date|thai_short }})</div>
+            {% include "audits/_field.html" with field=form.copy_results %}
+            {% include "audits/_field.html" with field=form.copy_findings %}
+          {% endif %}
+          <button class="btn btn-primary"><i class="bi bi-plus"></i> สร้างรอบการตรวจ</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold"><i class="bi bi-building"></i> ข้อมูลสถานประกอบกิจการ</div>
+      <div class="card-body small">
+        <dl class="row mb-0">
+          <dt class="col-5">สถานที่ตั้ง</dt><dd class="col-7">{{ est.address|default:"—" }}</dd>
+          <dt class="col-5">จำนวนพนักงาน</dt><dd class="col-7">{{ est.employees|default:"—" }} คน</dd>
+          <dt class="col-5">มาตรฐานที่ได้รับ</dt><dd class="col-7">{{ est.certifications|default:"—" }}</dd>
+          <dt class="col-5">ผลิตภาพ</dt><dd class="col-7">{{ est.productivity_value|default:"—" }} {{ est.productivity_period }}</dd>
+          <dt class="col-5">ผู้ประสานงาน</dt>
+          <dd class="col-7">{% for c in est.coordinators.all %}<div>{{ c.name }} <span class="text-muted">{{ c.position }}</span></div>{% empty %}—{% endfor %}</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="card border-danger-subtle">
+      <div class="card-body">
+        <h2 class="h6 text-danger"><i class="bi bi-trash"></i> ลบสถานประกอบกิจการ</h2>
+        <p class="small text-muted">ข้อมูลทุกรอบการตรวจของสถานประกอบกิจการนี้จะถูกลบถาวร พิมพ์ชื่อเพื่อยืนยัน</p>
+        <form method="post" action="{% url 'audits:establishment_delete' est.pk %}" class="d-flex gap-2">{% csrf_token %}
+          <input name="confirm" class="form-control form-control-sm" placeholder="{{ est.name }}">
+          <button class="btn btn-sm btn-outline-danger">ลบ</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
