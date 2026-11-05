@@ -252,6 +252,14 @@ class SampleFlowTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get(public).status_code, 404)
 
+    def test_questionnaire_list_page_creates(self):
+        url = reverse("audits:questionnaires")
+        self.assertContains(self.client.get(url), "แบบสอบถามประเมินตนเองออนไลน์")
+        resp = self.client.post(url, {"establishment": self.est.pk, "scope": ["4.2.1", "4.2.2"], "days": 7})
+        q = Questionnaire.objects.get()
+        self.assertRedirects(resp, reverse("audits:questionnaire", args=[q.pk]))
+        self.assertContains(self.client.get(url), q.title)
+
     def test_generated_questions_cover_every_requirement(self):
         from core import selfassess, standard
         for item in standard.items():

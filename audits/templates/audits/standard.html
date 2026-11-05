@@ -11,6 +11,7 @@
     <a class="btn btn-success" href="{% url 'audits:blank_checklist' 'xlsx' %}"><i class="bi bi-file-earmark-excel"></i> Excel</a>
     {% if pdf_ok %}<a class="btn btn-success" href="{% url 'audits:blank_checklist' 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a>{% endif %}
   </div>
+  <a class="btn btn-primary ms-2" href="{% url 'audits:questionnaires' %}"><i class="bi bi-ui-radios"></i> แบบสอบถามประเมินตนเองออนไลน์</a>
   <a class="btn btn-outline-success ms-2" href="{% url 'audits:blank_context' 'docx' %}"><i class="bi bi-file-earmark-word"></i> แบบฟอร์ม 4.2.1 บริบท (เปล่า)</a>
 </div>
 <div class="accordion" id="std">

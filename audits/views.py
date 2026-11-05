@@ -17,7 +17,8 @@ from core import pdf, scoring, selfassess, standard
 from . import services
 from .forms import (AssignmentFormSet, ConclusionForm, ConsultantFormSet, ContextAnalysisForm, ContextIssueFormSet,
                     CoordinatorFormSet, EstablishmentCreateForm, EstablishmentForm, FindingForm,
-                    InterestedPartyFormSet, PublicContextForm, QuestionnaireCreateForm, ReportSettingsForm,
+                    InterestedPartyFormSet, PublicContextForm, QuestionnaireCreateForm, QuestionnaireNewForm,
+                    ReportSettingsForm,
                     RoundCreateForm, RoundForm, ShareForm, consultant_formset)
 from .models import (AssessmentRound, ContextAnalysis, Establishment, Finding, FindingPhoto, QEvidence, Questionnaire,
                      ReportSettings)
@@ -211,6 +212,19 @@ def public_context(request, token):
 
 
 # ---------------------------------------------------------------- online self-assessment
+
+@login_required
+def questionnaires(request):
+    form = QuestionnaireNewForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        q = services.create_questionnaire(d["establishment"], d["scope"], d["days"], d["title"])
+        messages.success(request, "สร้างแบบสอบถามแล้ว คัดลอกลิงก์ส่งให้สถานประกอบกิจการได้เลย")
+        return redirect("audits:questionnaire", q.pk)
+    rows = [{"q": q, "r": services.rating(q)} for q in
+            Questionnaire.objects.select_related("establishment").prefetch_related("answers", "files")]
+    return render(request, "audits/questionnaires.html", {"rows": rows, "form": form})
+
 
 @login_required
 @require_POST

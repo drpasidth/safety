@@ -172,6 +172,11 @@ class QuestionnaireCreateForm(BootstrapMixin, forms.Form):
         self.fields["scope"].widget.attrs["class"] = "form-check-input"
 
 
+class QuestionnaireNewForm(QuestionnaireCreateForm):
+    establishment = forms.ModelChoiceField(label="สถานประกอบกิจการ", queryset=Establishment.objects.order_by("name"))
+    field_order = ["establishment", "scope", "title", "days"]
+
+
 class ContextIssueForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         model = ContextIssue

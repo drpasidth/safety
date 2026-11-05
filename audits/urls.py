@@ -14,6 +14,7 @@ urlpatterns = [
     path("establishments/<int:pk>/context.<str:fmt>", views.download_context, name="context_download"),
     path("f/<str:token>/", views.public_context, name="public_context"),
     path("establishments/<int:pk>/questionnaires/new/", views.questionnaire_new, name="questionnaire_new"),
+    path("questionnaires/", views.questionnaires, name="questionnaires"),
     path("questionnaires/<int:pk>/", views.questionnaire_detail, name="questionnaire"),
     path("q/<str:token>/", views.public_questionnaire, name="public_questionnaire"),
     path("establishments/<int:pk>/", views.establishment, name="establishment"),
