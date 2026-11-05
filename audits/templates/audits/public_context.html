@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}แบบฟอร์ม 4.2.1 บริบทของสถานประกอบกิจการ · {{ est.name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <h1 class="h4 mb-0">แบบฟอร์มการวิเคราะห์บริบทของสถานประกอบกิจการ</h1>
+  <div class="text-muted">ข้อกำหนด 4.2.1 (T-OSH OSHMS:2023) · <strong>{{ est.name }}</strong></div>
+  <div class="small text-muted mt-1">กรอกข้อมูลแล้วกด "ส่งข้อมูล" ที่ด้านล่าง ที่ปรึกษาจะเห็นข้อมูลทันที
+    กลับมาแก้ไขได้ด้วยลิงก์เดิมจนถึง{{ ctx.share_expires|date:"j/n/Y" }}</div>
+</div>
+<form method="post" class="mb-3" onsubmit="return confirm('เติมรายการผู้มีส่วนได้ส่วนเสียที่พบบ่อยเป็นตัวอย่าง (เฉพาะตารางที่ยังว่าง)?')">{% csrf_token %}
+  <button class="btn btn-sm btn-outline-primary" name="action" value="prefill"><i class="bi bi-magic"></i> เติมตัวอย่างเพื่อเริ่มต้น</button>
+</form>
+<form method="post">{% csrf_token %}
+  {% include "audits/_context_form.html" with public=True %}
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row align-items-end">
+        <div class="col-md-6">{% include "audits/_field.html" with field=form.submitter %}</div>
+        <div class="col-md-6 mb-3">
+          <button class="btn btn-primary"><i class="bi bi-send"></i> ส่งข้อมูล</button>
+          <span class="text-muted small ms-2">ต้องการเพิ่มหลายแถว ให้ส่งข้อมูลแล้วจะมีแถวว่างเพิ่มให้</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}

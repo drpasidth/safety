@@ -171,6 +171,113 @@ class Assignment(models.Model):
         verbose_name_plural = "สิ่งที่มอบหมาย"
 
 
+class ContextAnalysis(models.Model):
+    establishment = models.OneToOneField(Establishment, on_delete=models.CASCADE, related_name="context")
+    doc_no = models.CharField("เลขที่เอกสาร", max_length=50, blank=True)
+    revision = models.CharField("แก้ไขครั้งที่", max_length=20, blank=True, default="0")
+    effective_date = models.DateField("วันที่มีผลบังคับใช้", null=True, blank=True)
+    reviewed_date = models.DateField("วันที่ทบทวนล่าสุด", null=True, blank=True)
+    next_review = models.DateField("กำหนดทบทวนครั้งถัดไป", null=True, blank=True)
+    prepared_by = models.CharField("ผู้จัดทำ", max_length=255, blank=True)
+    prepared_position = models.CharField("ตำแหน่งผู้จัดทำ", max_length=255, blank=True)
+    approved_by = models.CharField("ผู้อนุมัติ (นายจ้าง/ผู้บริหารสูงสุด)", max_length=255, blank=True)
+    approved_position = models.CharField("ตำแหน่งผู้อนุมัติ", max_length=255, blank=True)
+    initial_review_note = models.TextField(
+        "การทบทวนสถานะเบื้องต้น (ข้อ 3)", blank=True,
+        help_text="สรุปผลการทบทวนสถานะเบื้องต้น รวมถึงการปฏิบัติตามกฎหมายและข้อกำหนดอื่นที่เกี่ยวข้อง")
+    effectiveness_note = models.TextField(
+        "การติดตามประสิทธิผลของระบบ (ข้อ 4)", blank=True,
+        help_text="วิธีติดตามว่าระบบการจัดการฯ ดำเนินการได้อย่างมีประสิทธิภาพและประสิทธิผล เช่น ตัวชี้วัด การทบทวนของฝ่ายบริหาร")
+    share_token = models.CharField(max_length=64, unique=True, null=True, blank=True, editable=False)
+    share_expires = models.DateField("ลิงก์ใช้ได้ถึง", null=True, blank=True)
+    submitted_at = models.DateTimeField("ส่งข้อมูลออนไลน์ล่าสุด", null=True, blank=True)
+    submitted_by = models.CharField("ผู้กรอกออนไลน์", max_length=255, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "บริบทของสถานประกอบกิจการ (4.2.1)"
+        verbose_name_plural = "บริบทของสถานประกอบกิจการ (4.2.1)"
+
+    def __str__(self):
+        return f"บริบท · {self.establishment}"
+
+    @property
+    def share_active(self) -> bool:
+        from django.utils import timezone
+        return bool(self.share_token) and (self.share_expires is None
+                                           or self.share_expires >= timezone.localdate())
+
+
+INTERNAL, EXTERNAL = "internal", "external"
+SCOPE_CHOICES = [(INTERNAL, "ภายใน"), (EXTERNAL, "ภายนอก")]
+ISSUE_CATEGORIES = [
+    ("ประเด็นภายใน", [
+        ("people", "บุคลากร / ความสามารถ / จำนวนลูกจ้าง"),
+        ("process", "กระบวนการผลิต / การปฏิบัติงาน"),
+        ("equipment", "เครื่องจักร อุปกรณ์ และเทคโนโลยี"),
+        ("workplace", "สถานที่และสภาพแวดล้อมในการทำงาน"),
+        ("resources", "งบประมาณ / ทรัพยากร"),
+        ("management", "การบริหาร / วัฒนธรรมความปลอดภัย / ระบบที่มีอยู่"),
+    ]),
+    ("ประเด็นภายนอก", [
+        ("legal", "กฎหมายและข้อกำหนดอื่น ๆ"),
+        ("economic", "เศรษฐกิจ / การแข่งขัน / ตลาด"),
+        ("social", "สังคม / ชุมชนโดยรอบ"),
+        ("technology", "เทคโนโลยีภายนอก"),
+        ("environment", "สิ่งแวดล้อม / สภาพภูมิอากาศ / ภัยธรรมชาติ"),
+        ("political", "นโยบายภาครัฐ / การเมือง"),
+        ("supply", "ผู้รับเหมา / ผู้ส่งมอบ / ห่วงโซ่อุปทาน"),
+    ]),
+]
+EXTERNAL_CATEGORIES = {k for k, _ in ISSUE_CATEGORIES[1][1]}
+
+
+class ContextIssue(models.Model):
+    RISK, OPPORTUNITY = "risk", "opportunity"
+    NATURE_CHOICES = [(RISK, "ความเสี่ยง"), (OPPORTUNITY, "โอกาส")]
+
+    establishment = models.ForeignKey(Establishment, on_delete=models.CASCADE, related_name="context_issues")
+    order = models.PositiveSmallIntegerField(default=0)
+    category = models.CharField("ประเภทประเด็น", max_length=20, choices=ISSUE_CATEGORIES)
+    issue = models.TextField("ประเด็น")
+    effect = models.TextField("ผลกระทบต่อความปลอดภัยฯ / ต่อการบรรลุผลของระบบ", blank=True)
+    nature = models.CharField("ความเสี่ยง / โอกาส", max_length=20, choices=NATURE_CHOICES, default=RISK)
+    action = models.TextField("การดำเนินการ / มาตรการ", blank=True)
+    responsible = models.CharField("ผู้รับผิดชอบ", max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        verbose_name = "ประเด็นภายในและภายนอก"
+        verbose_name_plural = "ประเด็นภายในและภายนอก"
+
+    def __str__(self):
+        return self.issue[:60]
+
+    @property
+    def scope(self) -> str:
+        return EXTERNAL if self.category in EXTERNAL_CATEGORIES else INTERNAL
+
+
+class InterestedParty(models.Model):
+    establishment = models.ForeignKey(Establishment, on_delete=models.CASCADE, related_name="interested_parties")
+    order = models.PositiveSmallIntegerField(default=0)
+    party = models.CharField("ผู้มีส่วนได้ส่วนเสีย", max_length=255)
+    scope = models.CharField("ภายใน / ภายนอก", max_length=10, choices=SCOPE_CHOICES, default=INTERNAL)
+    needs = models.TextField("ความต้องการและความคาดหวัง")
+    is_requirement = models.BooleanField("นำมาเป็นข้อกำหนดที่ต้องปฏิบัติ", default=False,
+                                         help_text="เช่น เป็นข้อกฎหมายหรือข้อตกลงที่ต้องปฏิบัติตาม")
+    action = models.TextField("การตอบสนอง / การดำเนินการ", blank=True)
+    responsible = models.CharField("ผู้รับผิดชอบ", max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        verbose_name = "ผู้มีส่วนได้ส่วนเสีย"
+        verbose_name_plural = "ผู้มีส่วนได้ส่วนเสีย"
+
+    def __str__(self):
+        return self.party
+
+
 class ReportSettings(models.Model):
     org_lines = models.TextField("หัวกระดาษ (บรรทัดละ 1 บรรทัด)", default="\n".join([
         "สถาบันส่งเสริมความปลอดภัย อาชีวอนามัย และสภาพแวดล้อมในการทำงาน (องค์การมหาชน)",

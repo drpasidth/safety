@@ -1,6 +1,7 @@
 import io
 import shutil
 import tempfile
+from datetime import date, timedelta
 
 from django.contrib.auth.models import User
 from django.core.management import call_command
@@ -13,7 +14,7 @@ from PIL import Image
 from core import scoring
 
 from . import services
-from .models import AssessmentRound, Establishment, Finding, Result
+from .models import AssessmentRound, ContextAnalysis, ContextIssue, Establishment, Finding, Result
 
 MEDIA = tempfile.mkdtemp(prefix="oshms-test-media-")
 
@@ -48,7 +49,8 @@ class SampleFlowTests(TestCase):
     def test_every_page_renders(self):
         urls = [reverse("audits:home"), reverse("audits:standard"), reverse("audits:settings"),
                 reverse("audits:establishment", args=[self.est.pk]),
-                reverse("audits:establishment_edit", args=[self.est.pk])]
+                reverse("audits:establishment_edit", args=[self.est.pk]),
+                reverse("audits:context", args=[self.est.pk])]
         for rnd in (self.initial, self.visit):
             urls += [reverse(f"audits:{name}", args=[rnd.pk])
                      for name in ("round", "round_edit", "checklist", "findings", "assignments", "conclusion")]
@@ -121,6 +123,85 @@ class SampleFlowTests(TestCase):
         for fmt in ("docx", "xlsx"):
             self.assertEqual(self.client.get(reverse("audits:blank_checklist", args=[fmt])).status_code, 200)
         self.assertEqual(self.client.get(reverse("audits:blank_checklist", args=["exe"])).status_code, 404)
+
+    def test_context_form(self):
+        url = reverse("audits:context", args=[self.est.pk])
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.client.post(url, {"action": "prefill"})
+        n_parties = self.est.interested_parties.count()
+        self.assertEqual(n_parties, len(services.DEFAULT_PARTIES))
+        self.assertGreater(self.est.context_issues.count(), 0)
+
+        mgmt = lambda p, n: {f"{p}-TOTAL_FORMS": n, f"{p}-INITIAL_FORMS": 0, f"{p}-MIN_NUM_FORMS": 0,
+                             f"{p}-MAX_NUM_FORMS": 1000}
+        self.est.context_issues.all().delete()
+        self.est.interested_parties.all().delete()
+        resp = self.client.post(url, {
+            "doc_no": "FM-OSH-001", "revision": "1", "effective_date": "2026-01-15", "prepared_by": "นายจัดทำ",
+            "initial_review_note": "ทบทวนกฎหมายครบถ้วน",
+            **mgmt("issue", 2), "issue-0-category": "legal", "issue-0-issue": "กฎกระทรวงความร้อนฉบับใหม่",
+            "issue-0-nature": "risk", "issue-0-action": "ตรวจวัดความร้อน", "issue-1-nature": "risk",
+            **mgmt("party", 1), "party-0-party": "ลูกจ้าง", "party-0-scope": "internal",
+            "party-0-needs": "ทำงานปลอดภัย", "party-0-is_requirement": "on"})
+        self.assertRedirects(resp, url)
+        issue = self.est.context_issues.get()
+        self.assertEqual((issue.scope, issue.order), ("external", 1))
+        self.assertTrue(self.est.interested_parties.get().is_requirement)
+
+        resp = self.client.get(reverse("audits:context_download", args=[self.est.pk, "docx"]))
+        doc = Document(io.BytesIO(resp.content))
+        cells = "\n".join(c.text for t in doc.tables for row in t.rows for c in row.cells)
+        self.assertIn("กฎกระทรวงความร้อนฉบับใหม่", cells)
+        self.assertIn("FM-OSH-001", cells)
+        self.assertIn("ร้อยละ 68.64", "\n".join(p.text for p in doc.paragraphs))
+        self.assertEqual(self.client.get(reverse("audits:blank_context", args=["docx"])).status_code, 200)
+
+    def test_public_share_link(self):
+        url = reverse("audits:context", args=[self.est.pk])
+        self.client.post(url, {"action": "share_create", "days": 7})
+        ctx = services.context_of(self.est)
+        self.assertTrue(ctx.share_active)
+        public = reverse("audits:public_context", args=[ctx.share_token])
+        self.assertContains(self.client.get(url), public)
+
+        other = Establishment.objects.create(name="บริษัท อื่น จำกัด")
+        foreign = ContextIssue.objects.create(establishment=other, category="legal", issue="ของบริษัทอื่น")
+        self.client.logout()
+        resp = self.client.get(public)
+        self.assertContains(resp, self.est.name)
+        self.assertNotContains(resp, "ของบริษัทอื่น")
+        mgmt = lambda p, n, i=0: {f"{p}-TOTAL_FORMS": n, f"{p}-INITIAL_FORMS": i, f"{p}-MIN_NUM_FORMS": 0,
+                                  f"{p}-MAX_NUM_FORMS": 1000}
+        form = {"submitter": "นางสาวผู้ประสาน (จป.วิชาชีพ)", "revision": "0",
+                **mgmt("issue", 1), "issue-0-category": "social", "issue-0-issue": "ชุมชนร้องเรียนเรื่องฝุ่น",
+                "issue-0-nature": "risk", **mgmt("party", 0)}
+        self.assertRedirects(self.client.post(public, form), public, fetch_redirect_response=False)
+        ctx.refresh_from_db()
+        self.assertEqual(ctx.submitted_by, "นางสาวผู้ประสาน (จป.วิชาชีพ)")
+        self.assertIsNotNone(ctx.submitted_at)
+        self.assertTrue(self.est.context_issues.filter(issue="ชุมชนร้องเรียนเรื่องฝุ่น").exists())
+
+        hijack = {**form, **mgmt("issue", 1, 1), "issue-0-id": foreign.pk, "issue-0-issue": "แก้ข้ามบริษัท"}
+        self.client.post(public, hijack)
+        foreign.refresh_from_db()
+        self.assertEqual(foreign.issue, "ของบริษัทอื่น")
+
+        self.assertEqual(self.client.post(public, {**form, "submitter": ""}).status_code, 200)
+
+        ContextAnalysis.objects.filter(pk=ctx.pk).update(share_expires=date.today() - timedelta(days=1))
+        self.assertEqual(self.client.get(public).status_code, 404)
+
+        self.client.force_login(self.user)
+        self.client.post(url, {"action": "share_create", "days": 30})
+        self.assertEqual(self.client.get(public).status_code, 404)
+        ctx.refresh_from_db()
+        new_public = reverse("audits:public_context", args=[ctx.share_token])
+        self.client.logout()
+        self.assertEqual(self.client.get(new_public).status_code, 200)
+        self.client.force_login(self.user)
+        self.client.post(url, {"action": "share_disable"})
+        self.client.logout()
+        self.assertEqual(self.client.get(new_public).status_code, 404)
 
     def test_delete_requires_typed_name(self):
         self.client.post(reverse("audits:establishment_delete", args=[self.est.pk]), {"confirm": "ผิด"})

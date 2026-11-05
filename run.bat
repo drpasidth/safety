@@ -13,7 +13,7 @@ if not exist .venv\Scripts\python.exe (
     )
 )
 
-.venv\Scripts\python -c "import django, docx, openpyxl, fitz, PIL" 2>nul || (
+.venv\Scripts\python -c "import django, docx, openpyxl, fitz, PIL, whitenoise, waitress" 2>nul || (
     echo === Installing requirements ===
     .venv\Scripts\python -m pip install --upgrade pip
     .venv\Scripts\python -m pip install -r requirements.txt || (

@@ -9,8 +9,9 @@
   <div class="btn-group">
     <a class="btn btn-success" href="{% url 'audits:blank_checklist' 'docx' %}"><i class="bi bi-file-earmark-word"></i> Checklist เปล่า Word</a>
     <a class="btn btn-success" href="{% url 'audits:blank_checklist' 'xlsx' %}"><i class="bi bi-file-earmark-excel"></i> Excel</a>
-    {% if word %}<a class="btn btn-success" href="{% url 'audits:blank_checklist' 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a>{% endif %}
+    {% if pdf_ok %}<a class="btn btn-success" href="{% url 'audits:blank_checklist' 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a>{% endif %}
   </div>
+  <a class="btn btn-outline-success ms-2" href="{% url 'audits:blank_context' 'docx' %}"><i class="bi bi-file-earmark-word"></i> แบบฟอร์ม 4.2.1 บริบท (เปล่า)</a>
 </div>
 <div class="accordion" id="std">
 {% for s in sections %}{% for sub in s.subs %}

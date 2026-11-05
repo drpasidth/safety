@@ -3,8 +3,8 @@ from django.forms import inlineformset_factory
 
 from core import standard
 
-from .models import (AssessmentRound, Assignment, Consultant, Coordinator, Establishment, Finding,
-                     ReportSettings)
+from .models import (AssessmentRound, Assignment, Consultant, ContextAnalysis, ContextIssue, Coordinator,
+                     Establishment, Finding, InterestedParty, ReportSettings)
 
 DATE = forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
 
@@ -139,6 +139,44 @@ class ConclusionForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         if not self.instance.is_site_visit:
             del self.fields["problems"]
+
+
+class ContextAnalysisForm(BootstrapMixin, forms.ModelForm):
+    class Meta:
+        model = ContextAnalysis
+        exclude = ["establishment", "updated_at", "share_expires", "submitted_at", "submitted_by"]
+        widgets = {"effective_date": DATE, "reviewed_date": DATE, "next_review": DATE,
+                   "initial_review_note": forms.Textarea(attrs={"rows": 4}),
+                   "effectiveness_note": forms.Textarea(attrs={"rows": 4})}
+
+
+class PublicContextForm(ContextAnalysisForm):
+    submitter = forms.CharField(label="ชื่อ-สกุล / ตำแหน่ง ผู้กรอกข้อมูล", max_length=255)
+
+
+class ShareForm(BootstrapMixin, forms.Form):
+    days = forms.TypedChoiceField(label="อายุลิงก์", coerce=int, initial=30,
+                                  choices=[(7, "7 วัน"), (30, "30 วัน"), (90, "90 วัน")])
+
+
+class ContextIssueForm(BootstrapMixin, forms.ModelForm):
+    class Meta:
+        model = ContextIssue
+        fields = ["category", "issue", "effect", "nature", "action", "responsible"]
+        widgets = {f: forms.Textarea(attrs={"rows": 2}) for f in ("issue", "effect", "action")}
+
+
+class InterestedPartyForm(BootstrapMixin, forms.ModelForm):
+    class Meta:
+        model = InterestedParty
+        fields = ["party", "scope", "needs", "is_requirement", "action", "responsible"]
+        widgets = {f: forms.Textarea(attrs={"rows": 2}) for f in ("needs", "action")}
+
+
+ContextIssueFormSet = inlineformset_factory(Establishment, ContextIssue, form=ContextIssueForm, extra=2,
+                                            can_delete=True)
+InterestedPartyFormSet = inlineformset_factory(Establishment, InterestedParty, form=InterestedPartyForm, extra=2,
+                                               can_delete=True)
 
 
 class ReportSettingsForm(BootstrapMixin, forms.ModelForm):

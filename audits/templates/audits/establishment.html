@@ -73,6 +73,19 @@
 
   <div class="col-xl-4">
     <div class="card shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold"><i class="bi bi-folder2-open"></i> แบบฟอร์มประกอบข้อกำหนด</div>
+      <div class="list-group list-group-flush">
+        <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="{% url 'audits:context' est.pk %}">
+          <span>4.2.1 บริบทของสถานประกอบกิจการ</span>
+          <span class="text-end">
+            <span class="badge text-bg-light">ประเด็น {{ est.context_issues.count }} · ผู้มีส่วนได้ส่วนเสีย {{ est.interested_parties.count }}</span>
+            {% if est.context.submitted_at %}<br><span class="badge text-bg-success">ส่งออนไลน์ {{ est.context.submitted_at|date:"j/n/Y" }}</span>
+            {% elif est.context.share_active %}<br><span class="badge text-bg-info">เปิดลิงก์ให้กรอกออนไลน์</span>{% endif %}
+          </span>
+        </a>
+      </div>
+    </div>
+    <div class="card shadow-sm mb-3">
       <div class="card-header bg-white fw-semibold"><i class="bi bi-building"></i> ข้อมูลสถานประกอบกิจการ</div>
       <div class="card-body small">
         <dl class="row mb-0">

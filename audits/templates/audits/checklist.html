@@ -45,7 +45,9 @@
 
     <form method="post" id="checklist-form">{% csrf_token %}
     {% for g in groups %}
-      <h2 class="h5 mt-2">{{ g.sub.code }} {{ g.sub.title }}</h2>
+      <h2 class="h5 mt-2">{{ g.sub.code }} {{ g.sub.title }}
+        {% if g.sub.code == "4.2.1" %}<a class="btn btn-sm btn-outline-primary ms-2" href="{% url 'audits:context' est.pk %}"><i class="bi bi-file-earmark-text"></i> แบบฟอร์มบริบท</a>{% endif %}
+      </h2>
       {% if g.sub.intro %}<p class="pre-line">{{ g.sub.intro }}</p>{% endif %}
       {% for row in g.rows %}
         {% with i=row.item %}

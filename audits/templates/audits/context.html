@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% load audit %}
+{% block title %}4.2.1 บริบท · {{ est.name }}{% endblock %}
+{% block breadcrumb %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb">
+  <li class="breadcrumb-item"><a href="{% url 'audits:home' %}">สถานประกอบกิจการ</a></li>
+  <li class="breadcrumb-item"><a href="{{ est.get_absolute_url }}">{{ est.name }}</a></li>
+  <li class="breadcrumb-item active">4.2.1 บริบทของสถานประกอบกิจการ</li>
+</ol></nav>
+{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <div>
+    <h1 class="h4 mb-0">แบบฟอร์มการวิเคราะห์บริบทของสถานประกอบกิจการ</h1>
+    <div class="text-muted small">ข้อกำหนด 4.2.1 · {{ est.name }}</div>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="post" onsubmit="return confirm('เติมผู้มีส่วนได้ส่วนเสียที่พบบ่อย และนำจุดแข็ง/จุดอ่อนจากข้อมูลสถานประกอบกิจการมาเป็นประเด็นภายใน (เฉพาะตารางที่ยังว่าง)?')">{% csrf_token %}
+      <button class="btn btn-outline-primary" name="action" value="prefill"><i class="bi bi-magic"></i> เติมตัวอย่าง</button>
+    </form>
+    <div class="dropdown">
+      <button class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> ดาวน์โหลด</button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><h6 class="dropdown-header">แบบฟอร์มที่กรอกแล้ว</h6></li>
+        <li><a class="dropdown-item" href="{% url 'audits:context_download' est.pk 'docx' %}"><i class="bi bi-file-earmark-word"></i> Word (.docx)</a></li>
+        {% if pdf_ok %}<li><a class="dropdown-item js-slow" href="{% url 'audits:context_download' est.pk 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a></li>{% endif %}
+        <li><hr class="dropdown-divider"></li>
+        <li><h6 class="dropdown-header">แบบฟอร์มเปล่า (พิมพ์ไปกรอก)</h6></li>
+        <li><a class="dropdown-item" href="{% url 'audits:blank_context' 'docx' %}"><i class="bi bi-file-earmark-word"></i> Word (.docx)</a></li>
+        {% if pdf_ok %}<li><a class="dropdown-item js-slow" href="{% url 'audits:blank_context' 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a></li>{% endif %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3 border-primary-subtle">
+  <div class="card-header bg-primary-subtle fw-semibold"><i class="bi bi-globe"></i> ให้สถานประกอบกิจการกรอกออนไลน์</div>
+  <div class="card-body">
+    {% if share_url %}
+      <div class="input-group mb-2">
+        <input class="form-control" id="share-url" value="{{ share_url }}" readonly>
+        <button class="btn btn-outline-primary" type="button" id="copy-share"><i class="bi bi-clipboard"></i> คัดลอกลิงก์</button>
+      </div>
+      <div class="small text-muted mb-2">
+        ใช้ได้ถึง {{ ctx.share_expires|thai_short }} · ผู้ที่มีลิงก์นี้เปิดและแก้ไขแบบฟอร์มนี้ได้โดยไม่ต้องเข้าสู่ระบบ ส่งให้เฉพาะผู้ประสานงานของสถานประกอบกิจการ
+      </div>
+    {% else %}
+      <p class="small mb-2">สร้างลิงก์แล้วส่งให้ผู้ประสานงานของสถานประกอบกิจการ เพื่อกรอกแบบฟอร์มนี้ทางเว็บได้เองโดยไม่ต้องมีบัญชีผู้ใช้ ข้อมูลที่กรอกจะแสดงในหน้านี้ทันที</p>
+    {% endif %}
+    {% if ctx.submitted_at %}
+      <div class="alert alert-success py-1 px-2 small mb-2"><i class="bi bi-check-circle"></i>
+        สถานประกอบกิจการส่งข้อมูลล่าสุด {{ ctx.submitted_at|date:"j/n/Y H:i" }} โดย {{ ctx.submitted_by }}</div>
+    {% endif %}
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <form method="post" class="d-flex gap-2 align-items-center"
+            {% if share_url %}onsubmit="return confirm('สร้างลิงก์ใหม่? ลิงก์เดิมจะใช้ไม่ได้อีก')"{% endif %}>{% csrf_token %}
+        {{ share_form.days }}
+        <button class="btn btn-primary btn-sm text-nowrap" name="action" value="share_create"><i class="bi bi-link-45deg"></i>
+          {% if share_url %}สร้างลิงก์ใหม่{% else %}สร้างลิงก์{% endif %}</button>
+      </form>
+      {% if share_url %}
+        <form method="post" onsubmit="return confirm('ปิดลิงก์? สถานประกอบกิจการจะเปิดแบบฟอร์มไม่ได้อีก')">{% csrf_token %}
+          <button class="btn btn-outline-danger btn-sm" name="action" value="share_disable"><i class="bi bi-x-circle"></i> ปิดลิงก์</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<form method="post">{% csrf_token %}
+  {% include "audits/_context_form.html" %}
+  <button class="btn btn-primary"><i class="bi bi-save"></i> บันทึก</button>
+  <span class="text-muted small ms-2">ต้องการเพิ่มหลายแถว ให้บันทึกแล้วจะมีแถวว่างเพิ่มให้ · บันทึกก่อนดาวน์โหลด</span>
+</form>
+{% include "audits/_slow_js.html" %}
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("copy-share")?.addEventListener("click", e => {
+  const input = document.getElementById("share-url");
+  navigator.clipboard.writeText(input.value).then(() => { e.currentTarget.innerHTML = '<i class="bi bi-check2"></i> คัดลอกแล้ว'; });
+});
+</script>
+{% endblock %}

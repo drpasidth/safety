@@ -7,16 +7,18 @@ from django.db.models import Max
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_POST
 
 from core import pdf, scoring, standard
 
 from . import services
-from .forms import (AssignmentFormSet, ConclusionForm, ConsultantFormSet, CoordinatorFormSet, EstablishmentCreateForm,
-                    EstablishmentForm, FindingForm, ReportSettingsForm, RoundCreateForm, RoundForm,
-                    consultant_formset)
-from .models import AssessmentRound, Establishment, Finding, FindingPhoto, ReportSettings
+from .forms import (AssignmentFormSet, ConclusionForm, ConsultantFormSet, ContextAnalysisForm, ContextIssueFormSet,
+                    CoordinatorFormSet, EstablishmentCreateForm, EstablishmentForm, FindingForm,
+                    InterestedPartyFormSet, PublicContextForm, ReportSettingsForm, RoundCreateForm, RoundForm,
+                    ShareForm, consultant_formset)
+from .models import AssessmentRound, ContextAnalysis, Establishment, Finding, FindingPhoto, ReportSettings
 
 MIME = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -124,6 +126,86 @@ def establishment_delete(request, pk):
     return redirect("audits:home")
 
 
+def _save_ordered(formset):
+    objs = formset.save(commit=False)
+    for obj in formset.deleted_objects:
+        obj.delete()
+    base = formset.model.objects.filter(establishment=formset.instance).aggregate(m=Max("order"))["m"] or 0
+    for n, obj in enumerate(objs, 1):
+        if obj.pk is None:
+            obj.order = base + n
+        obj.save()
+
+
+def _context_form(request, est, ctx, form_class, on_saved):
+    """Shared by the consultant page and the public share-link page. Returns a response or the page context."""
+    if request.method == "POST" and request.POST.get("action") == "prefill":
+        issues, parties = services.prefill_context(est)
+        messages.success(request, f"เติมตัวอย่างแล้ว: ประเด็น {issues} รายการ, ผู้มีส่วนได้ส่วนเสีย {parties} รายการ"
+                         if issues or parties else "มีข้อมูลอยู่แล้ว ไม่ได้เติมตัวอย่างเพิ่ม")
+        return redirect(request.path)
+    data = request.POST if request.method == "POST" and not request.POST.get("action") else None
+    form = form_class(data, instance=ctx)
+    issues = ContextIssueFormSet(data, instance=est, prefix="issue")
+    parties = InterestedPartyFormSet(data, instance=est, prefix="party")
+    if data is not None and form.is_valid() and issues.is_valid() and parties.is_valid():
+        with transaction.atomic():
+            form.save()
+            _save_ordered(issues)
+            _save_ordered(parties)
+            on_saved(form)
+        return redirect(request.path)
+    return {"est": est, "ctx": ctx, "form": form, "issues": issues, "parties": parties,
+            "initial_round": services.initial_round_summary(est),
+            "requirements": [i for i in standard.items() if i["subclause"] == "4.2.1"]}
+
+
+@login_required
+def context(request, pk):
+    est = get_object_or_404(Establishment, pk=pk)
+    ctx = services.context_of(est)
+    action = request.POST.get("action") if request.method == "POST" else None
+    if action == "share_create":
+        share = ShareForm(request.POST)
+        services.enable_share(ctx, share.cleaned_data["days"] if share.is_valid() else 30)
+        messages.success(request, "สร้างลิงก์ใหม่แล้ว ลิงก์เดิม (ถ้ามี) ใช้ไม่ได้อีกต่อไป")
+        return redirect("audits:context", est.pk)
+    if action == "share_disable":
+        services.disable_share(ctx)
+        messages.success(request, "ปิดลิงก์แล้ว")
+        return redirect("audits:context", est.pk)
+
+    def saved(form):
+        messages.success(request, "บันทึกแบบฟอร์มบริบทของสถานประกอบกิจการแล้ว")
+
+    page = _context_form(request, est, ctx, ContextAnalysisForm, saved)
+    if isinstance(page, HttpResponse):
+        return page
+    share_url = (request.build_absolute_uri(reverse("audits:public_context", args=[ctx.share_token]))
+                 if ctx.share_active else "")
+    return render(request, "audits/context.html", {**page, "pdf_ok": pdf.available(), "share_form": ShareForm(),
+                                                   "share_url": share_url})
+
+
+def public_context(request, token):
+    ctx = ContextAnalysis.objects.select_related("establishment").filter(share_token=token).first()
+    if ctx is None or not ctx.share_active:
+        return render(request, "audits/public_closed.html", status=404)
+    est = ctx.establishment
+
+    def saved(form):
+        ContextAnalysis.objects.filter(pk=ctx.pk).update(submitted_at=timezone.now(),
+                                                         submitted_by=form.cleaned_data["submitter"])
+        messages.success(request, "ส่งข้อมูลเรียบร้อยแล้ว ขอบคุณครับ/ค่ะ แก้ไขเพิ่มเติมได้จนกว่าลิงก์จะหมดอายุ")
+
+    page = _context_form(request, est, ctx, PublicContextForm, saved)
+    if isinstance(page, HttpResponse):
+        return page
+    if request.method == "GET" and ctx.submitted_by:
+        page["form"].initial.setdefault("submitter", ctx.submitted_by)
+    return render(request, "audits/public_context.html", page)
+
+
 # ---------------------------------------------------------------- rounds
 
 def _round(pk) -> AssessmentRound:
@@ -142,7 +224,7 @@ def round_detail(request, pk):
            "evidence": results.get(str(i["id"]), {}).get("evidence", "")} for i in scoring.non_conforming(results)]
     return render(request, "audits/round_detail.html", {
         "rnd": rnd, "est": rnd.establishment, **stats, "subs": subs, "nc": nc,
-        "labels": status_text(rnd.is_site_visit), "word": pdf.word_available()})
+        "labels": status_text(rnd.is_site_visit), "pdf_ok": pdf.available()})
 
 
 @login_required
@@ -350,7 +432,7 @@ def conclusion(request, pk):
 @login_required
 def download_report(request, pk, fmt):
     rnd = _round(pk)
-    if fmt not in ("docx", "pdf") or (fmt == "pdf" and not pdf.word_available()):
+    if fmt not in ("docx", "pdf") or (fmt == "pdf" and not pdf.available()):
         raise Http404
     kind = "Initial_Review" if not rnd.is_site_visit else f"Site_Visit_{rnd.visit_no}"
     return _file(services.build_report(rnd, fmt == "pdf"),
@@ -360,7 +442,7 @@ def download_report(request, pk, fmt):
 @login_required
 def download_checklist(request, pk, fmt):
     rnd = _round(pk)
-    if fmt not in MIME or (fmt == "pdf" and not pdf.word_available()):
+    if fmt not in MIME or (fmt == "pdf" and not pdf.available()):
         raise Http404
     kind = "Initial_Review" if not rnd.is_site_visit else f"Site_Visit_{rnd.visit_no}"
     return _file(services.build_checklist(rnd, fmt),
@@ -369,9 +451,27 @@ def download_checklist(request, pk, fmt):
 
 @login_required
 def download_blank_checklist(request, fmt):
-    if fmt not in MIME or (fmt == "pdf" and not pdf.word_available()):
+    if fmt not in MIME or (fmt == "pdf" and not pdf.available()):
         raise Http404
     return _file(services.build_checklist(None, fmt), f"checklist_T-OSH_OSHMS_2023.{fmt}", fmt)
+
+
+def _context_fmt(fmt):
+    if fmt not in ("docx", "pdf") or (fmt == "pdf" and not pdf.available()):
+        raise Http404
+
+
+@login_required
+def download_context(request, pk, fmt):
+    est = get_object_or_404(Establishment, pk=pk)
+    _context_fmt(fmt)
+    return _file(services.build_context(est, fmt), _fname("4.2.1_บริบท", est.name) + f".{fmt}", fmt)
+
+
+@login_required
+def download_blank_context(request, fmt):
+    _context_fmt(fmt)
+    return _file(services.build_context(None, fmt), f"4.2.1_แบบฟอร์มบริบท.{fmt}", fmt)
 
 
 # ---------------------------------------------------------------- settings / standard
@@ -384,7 +484,7 @@ def report_settings(request):
         form.save()
         messages.success(request, "บันทึกการตั้งค่าแล้ว")
         return redirect("audits:settings")
-    return render(request, "audits/settings.html", {"form": form, "obj": obj, "word": pdf.word_available()})
+    return render(request, "audits/settings.html", {"form": form, "obj": obj, "pdf_ok": pdf.available()})
 
 
 @login_required
@@ -396,4 +496,4 @@ def standard_view(request):
             subs.append({"sub": sub, "items": [i for i in standard.items() if i["subclause"] == sub["code"]]})
         sections.append({"sec": sec, "subs": subs})
     return render(request, "audits/standard.html", {"sections": sections, "level_counts": standard.level_counts(),
-                                                    "word": pdf.word_available()})
+                                                    "pdf_ok": pdf.available()})

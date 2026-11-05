@@ -3,4 +3,6 @@ pillow
 python-docx
 openpyxl
 pymupdf
+whitenoise>=6.6
+waitress>=3.0
 pywin32; sys_platform == "win32"

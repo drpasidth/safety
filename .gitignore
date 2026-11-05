@@ -6,6 +6,7 @@ data/db.sqlite3
 data/db.sqlite3-journal
 data/secret_key.txt
 data/media/
+staticfiles/
 
 _img/
 _text/

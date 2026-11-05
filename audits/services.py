@@ -1,9 +1,14 @@
 """Bridge between the Django models and the framework-free code in `core/`."""
+import secrets
+from datetime import timedelta
+
 from django.db import transaction
+from django.utils import timezone
 
-from core import checklist_export, pdf, report_docx, scoring
+from core import checklist_export, context_docx, pdf, report_docx, scoring
 
-from .models import AssessmentRound, Assignment, Establishment, Finding, FindingPhoto, ReportSettings, Result
+from .models import (EXTERNAL, INTERNAL, AssessmentRound, Assignment, ContextAnalysis, ContextIssue, Establishment,
+                     Finding, FindingPhoto, InterestedParty, ReportSettings, Result)
 
 
 def _path(field) -> str:
@@ -106,7 +111,87 @@ def build_report(rnd: AssessmentRound, as_pdf: bool) -> bytes:
     data = report_docx.build_report(project_dict(rnd.establishment), round_dict(rnd), settings_dict())
     if as_pdf:
         return pdf.docx_to_pdf(data)
-    return pdf.update_docx_fields(data) if pdf.word_available() else data
+    return pdf.update_docx_fields(data)
+
+
+def context_of(est: Establishment) -> ContextAnalysis:
+    obj, _ = ContextAnalysis.objects.get_or_create(establishment=est)
+    return obj
+
+
+def enable_share(ctx: ContextAnalysis, days: int) -> None:
+    ctx.share_token = secrets.token_urlsafe(32)
+    ctx.share_expires = timezone.localdate() + timedelta(days=days)
+    ctx.save(update_fields=["share_token", "share_expires"])
+
+
+def disable_share(ctx: ContextAnalysis) -> None:
+    ctx.share_token, ctx.share_expires = None, None
+    ctx.save(update_fields=["share_token", "share_expires"])
+
+
+def initial_round_summary(est: Establishment) -> dict | None:
+    rnd = est.rounds.filter(kind=AssessmentRound.INITIAL).order_by("-date").first()
+    if not rnd:
+        return None
+    return {"pk": rnd.pk, "date": rnd.date.isoformat(), **scoring.overall(results_dict(rnd))}
+
+
+def context_dict(est: Establishment) -> dict:
+    ctx = context_of(est)
+    data = {f: getattr(ctx, f) for f in ("doc_no", "revision", "prepared_by", "prepared_position", "approved_by",
+                                         "approved_position", "initial_review_note", "effectiveness_note")}
+    for f in ("effective_date", "reviewed_date", "next_review"):
+        data[f] = getattr(ctx, f).isoformat() if getattr(ctx, f) else ""
+    data["issues"] = [{"scope": i.scope, "category_label": i.get_category_display(), "issue": i.issue,
+                       "effect": i.effect, "nature_label": i.get_nature_display(), "action": i.action,
+                       "responsible": i.responsible} for i in est.context_issues.all()]
+    data["parties"] = [{"scope": p.scope, "party": p.party, "needs": p.needs, "is_requirement": p.is_requirement,
+                        "action": p.action, "responsible": p.responsible} for p in est.interested_parties.all()]
+    data["initial_round"] = initial_round_summary(est)
+    return data
+
+
+def build_context(est: Establishment | None, fmt: str) -> bytes:
+    data = context_docx.build_context_docx(project_dict(est) if est else None,
+                                           context_dict(est) if est else None, settings_dict())
+    return pdf.docx_to_pdf(data) if fmt == "pdf" else data
+
+
+DEFAULT_PARTIES = [
+    ("ลูกจ้าง", INTERNAL, "ทำงานในสภาพแวดล้อมที่ปลอดภัย ได้รับการฝึกอบรมและอุปกรณ์คุ้มครองความปลอดภัยที่เหมาะสม "
+     "มีส่วนร่วมและได้รับคำปรึกษาในเรื่องความปลอดภัยฯ", True),
+    ("ผู้บริหาร / นายจ้าง", INTERNAL, "ไม่เกิดอุบัติเหตุและการเจ็บป่วยจากการทำงาน ปฏิบัติตามกฎหมาย "
+     "ลดความสูญเสียและต้นทุน ได้รับการรับรองมาตรฐาน", False),
+    ("คณะกรรมการความปลอดภัยฯ (คปอ.) / เจ้าหน้าที่ความปลอดภัย (จป.)", INTERNAL,
+     "ได้รับการสนับสนุนทรัพยากรและอำนาจในการดำเนินงานตามกฎหมาย", True),
+    ("หน่วยงานราชการ (กรมสวัสดิการและคุ้มครองแรงงาน, สำนักงานประกันสังคม ฯลฯ)", EXTERNAL,
+     "ปฏิบัติตามกฎหมายความปลอดภัย อาชีวอนามัย และสภาพแวดล้อมในการทำงาน รายงานอุบัติเหตุตามที่กฎหมายกำหนด", True),
+    ("ผู้รับเหมา / ผู้รับเหมาช่วง", EXTERNAL, "ได้รับข้อมูลอันตรายและข้อปฏิบัติด้านความปลอดภัยก่อนเข้าทำงาน "
+     "มีพื้นที่ทำงานที่ปลอดภัย", True),
+    ("ลูกค้า", EXTERNAL, "ได้รับสินค้า/บริการตามกำหนด ผู้ผลิตมีระบบการจัดการความปลอดภัยที่เชื่อถือได้", False),
+    ("ผู้ส่งมอบ / ผู้ขาย", EXTERNAL, "ได้รับข้อกำหนดด้านความปลอดภัยของสินค้าและการขนส่งที่ชัดเจน", False),
+    ("ชุมชนโดยรอบ", EXTERNAL, "ไม่ได้รับผลกระทบจากเหตุฉุกเฉิน มลพิษ เสียง หรือการจราจรจากการดำเนินงาน", False),
+]
+
+
+@transaction.atomic
+def prefill_context(est: Establishment) -> tuple[int, int]:
+    """Seed empty worksheets: common interested parties, plus issues from the profile's strengths/weaknesses."""
+    issues = parties = 0
+    if not est.interested_parties.exists():
+        InterestedParty.objects.bulk_create([
+            InterestedParty(establishment=est, order=n, party=party, scope=scope, needs=needs, is_requirement=req)
+            for n, (party, scope, needs, req) in enumerate(DEFAULT_PARTIES)])
+        parties = len(DEFAULT_PARTIES)
+    if not est.context_issues.exists():
+        rows = [(line, ContextIssue.OPPORTUNITY) for line in report_docx._lines(est.strengths)]
+        rows += [(line, ContextIssue.RISK) for line in report_docx._lines(est.weaknesses)]
+        ContextIssue.objects.bulk_create([
+            ContextIssue(establishment=est, order=n, category="management", issue=text, nature=nature)
+            for n, (text, nature) in enumerate(rows)])
+        issues = len(rows)
+    return issues, parties
 
 
 def build_checklist(rnd: AssessmentRound | None, fmt: str) -> bytes:

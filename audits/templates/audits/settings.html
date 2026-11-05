@@ -24,7 +24,7 @@
         {% if obj.logo %}<img src="{{ obj.logo.url }}" alt="โลโก้หัวกระดาษ" style="width:70px">{% endif %}
         <div class="small text-primary pre-line">{{ obj.org_lines }}</div>
       </div>
-      <p class="small text-muted mt-3 mb-0">{% if word %}พบ Microsoft Word — สร้าง PDF และอัปเดตสารบัญได้{% else %}ไม่พบ Microsoft Word — ดาวน์โหลดได้เฉพาะ Word/Excel (เปิดแล้วสั่งบันทึกเป็น PDF เอง){% endif %}</p>
+      <p class="small text-muted mt-3 mb-0">{% if pdf_ok %}สร้าง PDF ผ่าน {{ pdf_ok }}{% else %}ไม่พบ Microsoft Word หรือ LibreOffice — ดาวน์โหลดได้เฉพาะ Word/Excel (เปิดแล้วสั่งบันทึกเป็น PDF เอง){% endif %}</p>
     </div></div>
   </div>
 </div>

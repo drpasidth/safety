@@ -1,7 +1,7 @@
 from django.contrib import admin
 
-from .models import (AssessmentRound, Assignment, Consultant, Coordinator, Establishment, Finding, FindingPhoto,
-                     ReportSettings, Result)
+from .models import (AssessmentRound, Assignment, Consultant, ContextAnalysis, ContextIssue, Coordinator,
+                     Establishment, Finding, FindingPhoto, InterestedParty, ReportSettings, Result)
 
 
 class CoordinatorInline(admin.TabularInline):
@@ -9,11 +9,24 @@ class CoordinatorInline(admin.TabularInline):
     extra = 0
 
 
+class ContextIssueInline(admin.TabularInline):
+    model = ContextIssue
+    extra = 0
+
+
+class InterestedPartyInline(admin.TabularInline):
+    model = InterestedParty
+    extra = 0
+
+
 @admin.register(Establishment)
 class EstablishmentAdmin(admin.ModelAdmin):
     list_display = ["name", "business_type", "updated_at"]
     search_fields = ["name", "address"]
-    inlines = [CoordinatorInline]
+    inlines = [CoordinatorInline, ContextIssueInline, InterestedPartyInline]
+
+
+admin.site.register(ContextAnalysis)
 
 
 class ConsultantInline(admin.TabularInline):

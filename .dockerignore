@@ -1,0 +1,14 @@
+.git/
+.venv/
+__pycache__/
+*.pyc
+data/db.sqlite3
+data/secret_key.txt
+data/media/
+staticfiles/
+_img/
+_text/
+output_samples/
+*.pdf
+run.bat
+serve.bat

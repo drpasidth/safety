@@ -1,0 +1,65 @@
+{% load audit %}
+<div class="card shadow-sm mb-3">
+  <div class="card-header bg-white fw-semibold"><i class="bi bi-journal-text"></i> ข้อกำหนดที่เกี่ยวข้อง</div>
+  <ul class="list-group list-group-flush small">
+    {% for i in requirements %}<li class="list-group-item">{{ i.requirement }}</li>{% endfor %}
+  </ul>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-header bg-white fw-semibold"><i class="bi bi-file-earmark-text"></i> ข้อมูลเอกสาร</div>
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-3">{% include "audits/_field.html" with field=form.doc_no %}</div>
+      <div class="col-md-2">{% include "audits/_field.html" with field=form.revision %}</div>
+      <div class="col-md-2">{% include "audits/_field.html" with field=form.effective_date %}</div>
+      <div class="col-md-2">{% include "audits/_field.html" with field=form.reviewed_date %}</div>
+      <div class="col-md-3">{% include "audits/_field.html" with field=form.next_review %}</div>
+      <div class="col-md-3">{% include "audits/_field.html" with field=form.prepared_by %}</div>
+      <div class="col-md-3">{% include "audits/_field.html" with field=form.prepared_position %}</div>
+      <div class="col-md-3">{% include "audits/_field.html" with field=form.approved_by %}</div>
+      <div class="col-md-3">{% include "audits/_field.html" with field=form.approved_position %}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-header bg-white fw-semibold">ส่วนที่ 1 ประเด็นภายในและภายนอก (ข้อ 1)</div>
+  <div class="card-body table-responsive">
+    <p class="small text-muted mb-2">ประเด็นที่ส่งผลต่อความสามารถในการบรรลุผลของระบบการจัดการฯ เช่น ลักษณะงานและอันตราย บุคลากร กฎหมายใหม่ ชุมชน ผู้รับเหมา</p>
+    {% include "audits/_formset.html" with formset=issues %}
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-header bg-white fw-semibold">ส่วนที่ 2 ผู้มีส่วนได้ส่วนเสีย ความต้องการและความคาดหวัง (ข้อ 2)</div>
+  <div class="card-body table-responsive">
+    {% include "audits/_formset.html" with formset=parties %}
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-white fw-semibold">ส่วนที่ 3 การทบทวนสถานะเบื้องต้น (ข้อ 3)</div>
+      <div class="card-body">
+        {% if initial_round %}
+          <div class="alert alert-info py-2 small">
+            {% if public %}Initial Review {{ initial_round.date|thai_short }}{% else %}<a href="{% url 'audits:round' initial_round.pk %}">Initial Review {{ initial_round.date|thai_short }}</a>{% endif %}:
+            ดำเนินการแล้ว {{ initial_round.conform }}/{{ initial_round.total }} ข้อ ({{ initial_round.pct|floatformat:2 }}%)
+            — ข้อความนี้จะใส่ในแบบฟอร์มให้อัตโนมัติ
+          </div>
+        {% elif not public %}
+          <div class="alert alert-light py-2 small">ยังไม่มีรอบ Initial Review ของสถานประกอบกิจการนี้</div>
+        {% endif %}
+        {% include "audits/_field.html" with field=form.initial_review_note %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-white fw-semibold">ส่วนที่ 4 ประสิทธิผลของระบบ (ข้อ 4)</div>
+      <div class="card-body">{% include "audits/_field.html" with field=form.effectiveness_note %}</div>
+    </div>
+  </div>
+</div>

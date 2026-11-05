@@ -2,7 +2,7 @@
 document.querySelectorAll(".js-slow").forEach(a => a.addEventListener("click", () => {
   const note = document.createElement("div");
   note.className = "alert alert-info position-fixed bottom-0 end-0 m-3 shadow";
-  note.textContent = "กำลังสร้าง PDF ผ่าน Microsoft Word อาจใช้เวลาประมาณ 20 วินาที...";
+  note.textContent = "กำลังสร้าง PDF อาจใช้เวลาประมาณ 20 วินาที...";
   document.body.appendChild(note);
   setTimeout(() => note.remove(), 25000);
 }));
